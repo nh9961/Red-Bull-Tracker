@@ -1,0 +1,338 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Avenir Next", "Helvetica Neue", sans-serif;
+  background: #f5fbff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: #f5fbff;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #f5fbff;
+  color: #193042;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Avenir Next", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-strong, #74c7ec);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent, #bdeeff) 55%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(230, 244, 255, 0.92);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(116, 155, 184, 0.45);
+  border-radius: 999px;
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-lg border shadow-fridge backdrop-blur-2xl;
+    background: color-mix(in srgb, var(--panel) 86%, white);
+    border-color: var(--border);
+  }
+
+  .can-panel {
+    @apply rounded-lg border shadow-cyan backdrop-blur-2xl;
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--accent) 42%, white), rgba(255, 255, 255, 0.96) 52%, color-mix(in srgb, var(--accent-soft) 76%, white));
+    border-color: var(--border);
+  }
+
+  .can-emblem {
+    @apply flex h-11 w-11 items-center justify-center rounded-lg border text-[#193042] shadow-cyan;
+    background: linear-gradient(135deg, var(--accent), #ffffff 58%, var(--accent-warm));
+    border-color: color-mix(in srgb, var(--accent-strong) 35%, white);
+  }
+
+  .command-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 font-display text-sm font-semibold shadow-sm transition active:scale-[0.99];
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .primary-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold text-[#193042] shadow-cyan transition disabled:cursor-not-allowed;
+    background: var(--accent);
+    border-color: color-mix(in srgb, var(--accent-strong) 42%, white);
+  }
+
+  .secondary-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed;
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .excel-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold text-[#193042] shadow-cyan transition hover:brightness-105 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #ffe1ef, var(--accent));
+    border-color: color-mix(in srgb, var(--accent-strong) 35%, white);
+  }
+
+  .danger-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-300 bg-red-500/90 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-400 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500;
+  }
+
+  .nav-item {
+    @apply flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition;
+    color: var(--muted);
+  }
+
+  .nav-item-active {
+    @apply shadow-cyan;
+    background: var(--accent);
+    color: var(--text) !important;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-white shadow-sm transition;
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .quick-add {
+    @apply inline-flex min-h-12 items-center gap-2 rounded-md border bg-white px-3 font-display text-sm font-semibold shadow-sm transition hover:border-[var(--accent)];
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .field-label {
+    @apply grid gap-2 text-sm font-medium;
+    color: var(--muted);
+  }
+
+  .field-control {
+    @apply w-full rounded-md border bg-white px-3 py-3 text-base font-normal shadow-sm transition;
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .modal-panel {
+    @apply max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg border bg-white/95 p-5 shadow-fridge backdrop-blur-2xl sm:p-6;
+    border-color: var(--border);
+  }
+
+  .entry-row {
+    @apply grid gap-3 rounded-lg border bg-white/80 p-4 transition sm:grid-cols-[1fr_auto] sm:items-center;
+    border-color: var(--border);
+  }
+
+  .list-button {
+    @apply flex min-h-11 items-center justify-between rounded-lg border bg-white px-3 text-sm font-semibold transition;
+    border-color: var(--border);
+    color: var(--accent-strong);
+  }
+
+  .status-card {
+    @apply flex items-center gap-2 rounded-md border px-3 py-2 text-sm shadow-sm backdrop-blur-xl;
+  }
+
+  .accent-picker {
+    @apply inline-flex min-h-11 items-center gap-1 rounded-md border bg-white/80 p-1 shadow-sm;
+    border-color: var(--border);
+  }
+
+  .accent-picker button {
+    @apply inline-flex min-h-9 items-center gap-2 rounded px-3 text-sm font-semibold transition;
+    color: var(--muted);
+  }
+
+  .accent-picker button:hover,
+  .accent-picker-active {
+    background: var(--accent-soft);
+    color: var(--text) !important;
+  }
+
+  .accent-swatch {
+    @apply h-3 w-3 rounded-full border border-white shadow-sm;
+  }
+
+  .accent-swatch-blue {
+    background: #bdeeff;
+  }
+
+  .accent-swatch-pink {
+    background: #ffd6e8;
+  }
+}
+
+.app-shell {
+  --accent: #bdeeff;
+  --accent-soft: #e7f8ff;
+  --accent-strong: #4aa8d6;
+  --accent-warm: #ffe2ef;
+  --bg: #f5fbff;
+  --panel: #f8fcff;
+  --panel-strong: #ffffff;
+  --border: rgba(104, 164, 198, 0.24);
+  --text: #193042;
+  --muted: #607587;
+  --subtle: #7e93a3;
+  min-height: 100vh;
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+.app-shell[data-accent="pink"] {
+  --accent: #ffd6e8;
+  --accent-soft: #fff0f7;
+  --accent-strong: #d46c9d;
+  --accent-warm: #dff6ff;
+  --bg: #fff8fc;
+  --panel: #fffbfd;
+  --border: rgba(210, 108, 157, 0.22);
+}
+
+.backdrop-wash {
+  background:
+    radial-gradient(circle at 14% 12%, color-mix(in srgb, var(--accent) 48%, transparent), transparent 32%),
+    radial-gradient(circle at 82% 6%, color-mix(in srgb, var(--accent-warm) 72%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--bg) 0%, #ffffff 46%, color-mix(in srgb, var(--accent-soft) 66%, white) 100%);
+}
+
+.backdrop-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent-strong) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-strong) 12%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  opacity: 0.5;
+}
+
+.backdrop-rail {
+  background: linear-gradient(90deg, var(--accent), #ffffff, var(--accent-warm), var(--accent));
+}
+
+.app-shell .text-white,
+.app-shell .text-slate-50,
+.app-shell .text-slate-100,
+.app-shell .text-slate-200 {
+  color: var(--text) !important;
+}
+
+.app-shell .text-slate-300,
+.app-shell .text-slate-400,
+.app-shell .text-slate-500,
+.app-shell .text-slate-600 {
+  color: var(--muted) !important;
+}
+
+.app-shell .text-cyan-50,
+.app-shell .text-cyan-100,
+.app-shell .text-cyan-200 {
+  color: var(--accent-strong) !important;
+}
+
+.app-shell .text-emerald-200 {
+  color: #16845c !important;
+}
+
+.app-shell .text-amber-100,
+.app-shell .text-amber-200 {
+  color: #8a5a00 !important;
+}
+
+.app-shell .text-red-100,
+.app-shell .text-red-200 {
+  color: #b4233c !important;
+}
+
+.app-shell .text-\[\#07101f\] {
+  color: var(--text) !important;
+}
+
+.app-shell .bg-\[\#050711\],
+.app-shell .bg-\[\#090f22\]\/90,
+.app-shell .bg-\[\#0d142c\],
+.app-shell .bg-\[\#080d1f\]\/95,
+.app-shell .bg-\[\#070d1f\]\/90 {
+  background: var(--panel-strong) !important;
+}
+
+.app-shell .bg-cyan-300,
+.app-shell .bg-cyan-200,
+.app-shell .bg-cyan-300\/10,
+.app-shell .bg-cyan-200\/10 {
+  background-color: var(--accent) !important;
+}
+
+.app-shell .bg-pink-200,
+.app-shell .bg-pink-200\/10 {
+  background-color: var(--accent-soft) !important;
+}
+
+.app-shell .bg-white\/5,
+.app-shell .bg-white\/\[0\.05\],
+.app-shell .bg-white\/\[0\.06\],
+.app-shell .bg-white\/\[0\.08\],
+.app-shell .bg-white\/10,
+.app-shell .bg-white\/\[0\.10\],
+.app-shell .hover\:bg-white\/10:hover,
+.app-shell .hover\:bg-white\/\[0\.10\]:hover,
+.app-shell .hover\:bg-white\/\[0\.12\]:hover {
+  background-color: color-mix(in srgb, var(--accent-soft) 52%, white) !important;
+}
+
+.app-shell .border-white\/10,
+.app-shell .border-cyan-200\/20,
+.app-shell .border-cyan-200\/25,
+.app-shell .border-cyan-200\/30,
+.app-shell .border-cyan-300\/30,
+.app-shell .border-pink-200\/30,
+.app-shell .border-pink-200\/40 {
+  border-color: var(--border) !important;
+}
+
+.app-shell .shadow-fridge,
+.app-shell .shadow-cyan,
+.app-shell .shadow-sm {
+  box-shadow: 0 18px 55px rgba(83, 139, 174, 0.14), 0 1px 2px rgba(83, 139, 174, 0.10) !important;
+}
+
+.app-shell .danger-button,
+.app-shell .danger-button * {
+  color: #ffffff !important;
+}
+
+.app-shell .field-control::placeholder {
+  color: color-mix(in srgb, var(--muted) 58%, white);
+}
+
+.app-shell .modal-panel {
+  color: var(--text);
+}
