@@ -132,9 +132,16 @@ const NAV_ITEMS: Array<{ id: AppView; label: string; icon: LucideIcon }> = [
 ];
 
 const ACCENT_OPTIONS: Array<{ id: AccentTheme; label: string }> = [
-  { id: "blue", label: "Baby blue" },
   { id: "pink", label: "Pastel pink" },
 ];
+
+const MATERIAL_ACCENTS = {
+  primary: "var(--chart-primary)",
+  secondary: "var(--chart-secondary)",
+  tertiary: "var(--chart-tertiary)",
+  error: "var(--chart-error)",
+  custom: "#b85d84",
+};
 
 function App() {
   const [themeAccent, setThemeAccent] = useState<AccentTheme>(() => readStoredAccent());
@@ -522,7 +529,7 @@ function App() {
 
       <ShellBackdrop />
 
-      <div className="mx-auto grid w-full max-w-[1680px] gap-4 px-3 py-3 lg:grid-cols-[280px_1fr] lg:px-5 lg:py-5">
+      <div className="app-layout">
         <Sidebar
           accent={themeAccent}
           activeView={activeView}
@@ -531,11 +538,12 @@ function App() {
           setupStatus={setupStatus}
           user={user}
           onAccentChange={setThemeAccent}
+          onAdd={openNewEntry}
           onChange={setActiveView}
           onLogout={() => void logout()}
         />
 
-        <div className="min-w-0">
+        <div className="app-content">
           <MobileNav activeView={activeView} onChange={setActiveView} />
 
           <TopBar
@@ -561,7 +569,7 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="mt-4"
+              className="app-main"
             >
               {activeView === "overview" && (
                 <OverviewView
@@ -675,7 +683,7 @@ function LoadingScreen({ setupStatus, themeAccent }: { setupStatus: SetupStatus;
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-300/10 text-cyan-200">
             <Loader2 className="animate-spin" size={24} aria-hidden="true" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight text-white">Red Bull command centre</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight text-white">Red Bull tracker</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">{setupStatus.message}</p>
         </div>
       </div>
@@ -719,9 +727,9 @@ function AuthView({
   return (
     <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-accent={accent}>
       <ShellBackdrop />
-      <main className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 px-4 py-8 lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="min-w-0">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100">
+      <main className="auth-layout">
+        <section className="auth-hero">
+          <div className="state-chip mb-4">
             <Cloud size={16} aria-hidden="true" />
             {setupStatus.state === "ok" ? "Appwrite sync online" : "Appwrite setup check"}
           </div>
@@ -729,9 +737,9 @@ function AuthView({
             Red Bull Tracker App
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">
-            Glossy intake telemetry with Appwrite authentication, device sync, and finance-grade Excel exports.
+            Soft Material You intake tracking with Appwrite authentication, device sync, and polished Excel exports.
           </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="auth-signal-grid">
             <AuthSignal icon={ShieldCheck} label="User scoped" value="Private entries" />
             <AuthSignal icon={Database} label="Database" value={appwriteConfig.databaseId} />
             <AuthSignal icon={CheckCircle2} label="Ping" value={setupStatus.state === "ok" ? "Connected" : "Check setup"} />
@@ -746,17 +754,17 @@ function AuthView({
           </div>
         </section>
 
-        <section className="glass-panel p-5 sm:p-6">
-          <div className="mb-5 flex rounded-md border border-white/10 bg-white/5 p-1">
+        <section className="auth-panel">
+          <div className="segmented-control mb-5">
             <button
-              className={`flex-1 rounded px-3 py-2 text-sm font-semibold transition ${mode === "login" ? "bg-cyan-300 text-[#07101f]" : "text-slate-300 hover:bg-white/10"}`}
+              className={mode === "login" ? "segmented-control-active" : ""}
               type="button"
               onClick={() => setMode("login")}
             >
               Log in
             </button>
             <button
-              className={`flex-1 rounded px-3 py-2 text-sm font-semibold transition ${mode === "signup" ? "bg-pink-200 text-[#07101f]" : "text-slate-300 hover:bg-white/10"}`}
+              className={mode === "signup" ? "segmented-control-active" : ""}
               type="button"
               onClick={() => setMode("signup")}
             >
@@ -856,6 +864,7 @@ function Sidebar({
   setupStatus,
   user,
   onAccentChange,
+  onAdd,
   onChange,
   onLogout,
 }: {
@@ -866,22 +875,28 @@ function Sidebar({
   setupStatus: SetupStatus;
   user: AuthUser;
   onAccentChange: (accent: AccentTheme) => void;
+  onAdd: () => void;
   onChange: (view: AppView) => void;
   onLogout: () => void;
 }) {
   return (
-    <aside className="glass-panel sticky top-5 hidden h-[calc(100vh-2.5rem)] p-3 lg:flex lg:flex-col">
-      <div className="mb-7 flex items-center gap-3 px-2 pt-1">
+    <aside className="material-drawer">
+      <div className="drawer-brand">
         <div className="can-emblem">
           <Command size={22} aria-hidden="true" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">Red Bull</p>
-          <p className="truncate text-xs text-cyan-100">Intake telemetry</p>
+          <p className="truncate text-xs text-cyan-100">Intake tracker</p>
         </div>
       </div>
 
-      <nav className="grid gap-1" aria-label="Main navigation">
+      <button className="drawer-primary-action" type="button" onClick={onAdd}>
+        <Plus size={19} aria-hidden="true" />
+        Add intake
+      </button>
+
+      <nav className="drawer-nav" aria-label="Main navigation">
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
@@ -899,8 +914,8 @@ function Sidebar({
         <AccentPicker accent={accent} onChange={onAccentChange} />
       </div>
 
-      <div className="mt-auto grid gap-3">
-        <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
+      <div className="drawer-footer">
+        <div className="drawer-info-card">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
             {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={15} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={15} aria-hidden="true" />}
             Sync
@@ -909,7 +924,7 @@ function Sidebar({
           <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-200" : "text-amber-200"}`}>{setupStatus.message}</p>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
+        <div className="drawer-info-card">
           <p className="truncate text-sm font-semibold text-white">{user.name || user.email || "Appwrite user"}</p>
           <p className="mt-1 truncate text-xs text-slate-400">{user.email}</p>
           <button className="secondary-button mt-3 w-full justify-center" type="button" onClick={onLogout}>
@@ -924,14 +939,12 @@ function Sidebar({
 
 function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (view: AppView) => void }) {
   return (
-    <nav className="sticky top-3 z-30 mb-3 grid grid-cols-4 gap-1 rounded-lg border border-white/10 bg-[#090f22]/90 p-1 shadow-fridge backdrop-blur-xl lg:hidden" aria-label="Main navigation">
+    <nav className="mobile-nav-bar lg:hidden" aria-label="Main navigation">
       {NAV_ITEMS.map((item) => (
         <button
           key={item.id}
           type="button"
-          className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-medium transition ${
-            activeView === item.id ? "bg-cyan-300 text-[#07101f] shadow-cyan" : "text-slate-300 hover:bg-white/10"
-          }`}
+          className={`mobile-nav-item ${activeView === item.id ? "mobile-nav-item-active" : ""}`}
           onClick={() => onChange(item.id)}
         >
           <item.icon size={16} aria-hidden="true" />
@@ -967,7 +980,9 @@ function TopBar({
   onImportExcel: () => void;
   onRefresh: () => void;
 }) {
-  const title = NAV_ITEMS.find((item) => item.id === activeView)?.label ?? "Overview";
+  const activeItem = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
+  const title = activeItem.label;
+  const ActiveIcon = activeItem.icon;
   const subtitle = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -975,22 +990,32 @@ function TopBar({
   }).format(new Date());
 
   return (
-    <header className="glass-panel p-4 sm:p-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-cyan-100">
-            <span>{subtitle}</span>
-            <span className="rounded bg-white/10 px-2 py-1 text-xs text-slate-300">{user.email || "Synced user"}</span>
-          </p>
-          <h1 className="mt-1 text-4xl font-semibold tracking-tight text-white sm:text-5xl">{title}</h1>
+    <header className="top-app-bar">
+      <div className="top-app-bar-main">
+        <div className="top-title-cluster">
+          <span className="top-app-icon">
+            <ActiveIcon size={24} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="top-kicker">{subtitle}</p>
+            <h1 className="top-title">{title}</h1>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="top-meta-row">
+          <span className="account-chip">{user.email || "Synced user"}</span>
           <AccentPicker accent={accent} onChange={onAccentChange} />
+        </div>
+      </div>
+
+      <div className="top-action-row">
+        <div className="top-action-primary">
           <button className="primary-button" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
             <Plus size={18} aria-hidden="true" />
             Add Intake
           </button>
+        </div>
+        <div className="top-action-secondary">
           <button className="secondary-button" type="button" onClick={onRefresh} disabled={dataLoading}>
             {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
             Sync
@@ -1074,28 +1099,28 @@ function OverviewView({
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile icon={CalendarDays} label="This Month" value={dashboard.monthCans} detail={`${dashboard.monthSpend} spent`} accent="#39d5ff" />
-        <MetricTile icon={PoundSterling} label="Total Spend" value={dashboard.totalSpend} detail={`${dashboard.avgWeeklySpend} weekly average`} accent="#ffb7d9" />
-        <MetricTile icon={Activity} label="Favourite" value={dashboard.favouriteFlavour} detail="by total cans" accent="#ffd84d" />
-        <MetricTile icon={TimerReset} label="Days Without" value={dashboard.daysWithoutRedBull} detail={`${dashboard.currentStreak} day streak`} accent="#ff3448" />
+        <MetricTile icon={CalendarDays} label="This Month" value={dashboard.monthCans} detail={`${dashboard.monthSpend} spent`} accent={MATERIAL_ACCENTS.primary} />
+        <MetricTile icon={PoundSterling} label="Total Spend" value={dashboard.totalSpend} detail={`${dashboard.avgWeeklySpend} weekly average`} accent={MATERIAL_ACCENTS.secondary} />
+        <MetricTile icon={Activity} label="Favourite" value={dashboard.favouriteFlavour} detail="by total cans" accent={MATERIAL_ACCENTS.tertiary} />
+        <MetricTile icon={TimerReset} label="Days Without" value={dashboard.daysWithoutRedBull} detail={`${dashboard.currentStreak} day streak`} accent={MATERIAL_ACCENTS.error} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <AppCard title="Spend telemetry" subtitle="Last 30 logged days">
+        <AppCard title="Spend overview" subtitle="Last 30 logged days">
           {chartData.length ? (
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData} margin={{ top: 12, right: 12, bottom: 0, left: -18 }}>
                 <defs>
-                  <linearGradient id="mikuSpend" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#39d5ff" stopOpacity={0.36} />
-                    <stop offset="100%" stopColor="#39d5ff" stopOpacity={0.03} />
+                  <linearGradient id="spendGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={MATERIAL_ACCENTS.primary} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={MATERIAL_ACCENTS.primary} stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="rgba(203,213,225,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="spend" name="Spend" stroke="#39d5ff" fill="url(#mikuSpend)" strokeWidth={3} />
+                <Area type="monotone" dataKey="spend" name="Spend" stroke={MATERIAL_ACCENTS.primary} fill="url(#spendGradient)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -1131,7 +1156,7 @@ function OverviewView({
           {flavourData.length ? (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
-                <Pie data={flavourData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={104} paddingAngle={4} stroke="#080d1f" strokeWidth={4}>
+                <Pie data={flavourData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={104} paddingAngle={4} stroke="var(--surface-container)" strokeWidth={4}>
                   {flavourData.map((entry) => (
                     <Cell key={entry.name} fill={entry.accent} />
                   ))}
@@ -1169,12 +1194,12 @@ function TodayPanel({
           <p className="mt-2 text-lg text-slate-300">cans logged</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-          <MiniMetric label="Caffeine" value={dashboard.todayCaffeine} accent="#39d5ff" />
-          <MiniMetric label="Sugar" value={dashboard.todaySugar} accent="#ffb7d9" />
-          <MiniMetric label="Streak" value={dashboard.currentStreak} accent="#ffd84d" />
+          <MiniMetric label="Caffeine" value={dashboard.todayCaffeine} accent={MATERIAL_ACCENTS.primary} />
+          <MiniMetric label="Sugar" value={dashboard.todaySugar} accent={MATERIAL_ACCENTS.secondary} />
+          <MiniMetric label="Streak" value={dashboard.currentStreak} accent={MATERIAL_ACCENTS.tertiary} />
         </div>
       </div>
-      <div className="mt-6 flex flex-wrap items-center gap-2">
+      <div className="today-action-row mt-6 hidden flex-wrap items-center gap-2 lg:flex">
         <button className="primary-button" type="button" onClick={onAdd}>
           <Plus size={18} aria-hidden="true" />
           Add intake
@@ -1276,20 +1301,20 @@ function TrendsView({
               <AreaChart data={chartData} margin={{ top: 12, right: 16, bottom: 0, left: -12 }}>
                 <defs>
                   <linearGradient id="trendSpend" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#39d5ff" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#39d5ff" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor={MATERIAL_ACCENTS.primary} stopOpacity={0.26} />
+                    <stop offset="100%" stopColor={MATERIAL_ACCENTS.primary} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="trendCans" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#ff3448" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#ff3448" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor={MATERIAL_ACCENTS.secondary} stopOpacity={0.22} />
+                    <stop offset="100%" stopColor={MATERIAL_ACCENTS.secondary} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="rgba(203,213,225,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="spend" name="Spend" stroke="#39d5ff" fill="url(#trendSpend)" strokeWidth={3} />
-                <Area type="monotone" dataKey="cans" name="Cans" stroke="#ff3448" fill="url(#trendCans)" strokeWidth={3} />
+                <Area type="monotone" dataKey="spend" name="Spend" stroke={MATERIAL_ACCENTS.primary} fill="url(#trendSpend)" strokeWidth={3} />
+                <Area type="monotone" dataKey="cans" name="Cans" stroke={MATERIAL_ACCENTS.secondary} fill="url(#trendCans)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -1303,11 +1328,11 @@ function TrendsView({
           {chartData.length ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData} margin={{ top: 12, right: 16, bottom: 0, left: -12 }}>
-                <CartesianGrid stroke="rgba(203,213,225,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="caffeine" name="Caffeine" fill="#39d5ff" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="caffeine" name="Caffeine" fill={MATERIAL_ACCENTS.primary} radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -1319,12 +1344,12 @@ function TrendsView({
           {weekData.length ? (
             <ResponsiveContainer width="100%" height={300}>
               <RechartsLineChart data={weekData} margin={{ top: 12, right: 16, bottom: 0, left: -12 }}>
-                <CartesianGrid stroke="rgba(203,213,225,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Line type="monotone" dataKey="spend" name="Spend" stroke="#ffd84d" strokeWidth={3} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="cans" name="Cans" stroke="#ffb7d9" strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="spend" name="Spend" stroke={MATERIAL_ACCENTS.tertiary} strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="cans" name="Cans" stroke={MATERIAL_ACCENTS.primary} strokeWidth={3} dot={{ r: 3 }} />
               </RechartsLineChart>
             </ResponsiveContainer>
           ) : (
@@ -1338,7 +1363,7 @@ function TrendsView({
           {flavourData.length ? (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={flavourData} dataKey="value" nameKey="name" innerRadius={76} outerRadius={118} paddingAngle={4} stroke="#080d1f" strokeWidth={4}>
+                <Pie data={flavourData} dataKey="value" nameKey="name" innerRadius={76} outerRadius={118} paddingAngle={4} stroke="var(--surface-container)" strokeWidth={4}>
                   {flavourData.map((entry) => (
                     <Cell key={entry.name} fill={entry.accent} />
                   ))}
@@ -1384,9 +1409,9 @@ function DataView({
     <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
       <AppCard title="Appwrite storage" subtitle={`${entries.length} entries synced for this user`}>
         <div className="grid gap-3 sm:grid-cols-3">
-          <MiniMetric label="All-time cans" value={dashboard.allTimeCans} accent="#39d5ff" />
-          <MiniMetric label="Total spend" value={dashboard.totalSpend} accent="#ffd84d" />
-          <MiniMetric label="Favourite" value={dashboard.favouriteFlavour} accent="#ffb7d9" />
+          <MiniMetric label="All-time cans" value={dashboard.allTimeCans} accent={MATERIAL_ACCENTS.primary} />
+          <MiniMetric label="Total spend" value={dashboard.totalSpend} accent={MATERIAL_ACCENTS.tertiary} />
+          <MiniMetric label="Favourite" value={dashboard.favouriteFlavour} accent={MATERIAL_ACCENTS.secondary} />
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1425,7 +1450,7 @@ function DataView({
       </AppCard>
 
       <div className="grid gap-4">
-        <AppCard title="Excel theme" subtitle="Pastel pink and Miku blue workbook">
+        <AppCard title="Excel theme" subtitle="Pastel pink and soft blue workbook">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-cyan-200/30 bg-cyan-200/10 p-4">
               <FileSpreadsheet className="text-cyan-100" size={24} aria-hidden="true" />
@@ -1783,7 +1808,7 @@ function EntryModal({
   const initialFlavour = entry?.flavour ?? DEFAULT_FLAVOUR.name;
   const [selectedFlavour, setSelectedFlavour] = useState(initialFlavour);
   const [customFlavour, setCustomFlavour] = useState("");
-  const [customAccent, setCustomAccent] = useState("#39d5ff");
+  const [customAccent, setCustomAccent] = useState(MATERIAL_ACCENTS.custom);
   const [cans, setCans] = useState(entry?.cans.toString() ?? "1");
   const [sizePreset, setSizePreset] = useState(sizeToPreset(entry?.sizeMl ?? 250));
   const [customSize, setCustomSize] = useState(entry?.sizeMl.toString() ?? "250");
@@ -1799,7 +1824,7 @@ function EntryModal({
     const editingCustom = entry && !BUILT_IN_FLAVOURS.some((flavour) => flavour.name === entry.flavour);
     setSelectedFlavour(editingCustom ? entry.flavour : entry?.flavour ?? DEFAULT_FLAVOUR.name);
     setCustomFlavour(editingCustom ? entry.flavour : "");
-    setCustomAccent(entry?.flavourAccent ?? "#39d5ff");
+    setCustomAccent(entry?.flavourAccent ?? MATERIAL_ACCENTS.custom);
     setCans(entry?.cans.toString() ?? "1");
     setSizePreset(sizeToPreset(entry?.sizeMl ?? 250));
     setCustomSize(entry?.sizeMl.toString() ?? "250");
@@ -2057,9 +2082,9 @@ function ImportPreviewModal({
             </div>
 
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
-              <MiniMetric label="Ready" value={`${validRows.length}`} accent="#39d5ff" />
-              <MiniMetric label="Duplicates" value={`${duplicateRows.length}`} accent="#ffd84d" />
-              <MiniMetric label="Invalid" value={`${invalidRows.length}`} accent="#ff3448" />
+              <MiniMetric label="Ready" value={`${validRows.length}`} accent={MATERIAL_ACCENTS.primary} />
+              <MiniMetric label="Duplicates" value={`${duplicateRows.length}`} accent={MATERIAL_ACCENTS.tertiary} />
+              <MiniMetric label="Invalid" value={`${invalidRows.length}`} accent={MATERIAL_ACCENTS.error} />
             </div>
 
             <div className="max-h-[48vh] overflow-auto rounded-lg border border-white/10">
@@ -2306,8 +2331,7 @@ function actionLabel(value: string) {
 }
 
 function readStoredAccent(): AccentTheme {
-  const value = localStorage.getItem(ACCENT_STORAGE_KEY);
-  return value === "pink" ? "pink" : "blue";
+  return "pink";
 }
 
 export default App;
