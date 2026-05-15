@@ -34,57 +34,6 @@ export type EntryDraft = Omit<
   source?: RedBullEntry["source"];
 };
 
-export type BarcodeFormatName = "ean-13" | "ean-8" | "upc-a" | "upc-e" | "unknown";
-
-export type BarcodeProductDraft = {
-  flavourName: string;
-  sizeMl: number;
-  pricePerCan: number;
-  sugarFree?: boolean;
-  caffeineMgPerCan?: number;
-};
-
-export type ResolvedBarcodeProduct = BarcodeProductDraft & {
-  flavourAccent: string;
-  source: "built-in" | "user";
-};
-
-export type BarcodeSeedProduct = BarcodeProductDraft & {
-  verifiedBy: string;
-  sourceName?: string;
-  sourceUrl?: string;
-  notes?: string;
-  variant?: string;
-};
-
-export type UserBarcodeMapping = BarcodeProductDraft & {
-  barcode: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type BarcodeLookupCatalog = {
-  verifiedProducts?: Record<string, BarcodeSeedProduct>;
-  userMappings?: UserBarcodeMapping[];
-};
-
-export type BarcodeLookupResult =
-  | {
-      status: "known" | "user";
-      barcode: string;
-      product: ResolvedBarcodeProduct;
-    }
-  | {
-      status: "partial";
-      barcode: string;
-      product: BarcodeProductDraft;
-      reason: string;
-    }
-  | {
-      status: "unknown";
-      barcode: string;
-    };
-
 export type Filters = {
   flavour: string;
   dateRange: DateFilter;
@@ -104,41 +53,4 @@ export type ImportPreviewRow = {
 export type ImportPreview = {
   fileName: string;
   rows: ImportPreviewRow[];
-};
-
-export type ChatRole = "user" | "assistant";
-
-export type CoachMessage = {
-  id: string;
-  role: ChatRole;
-  content: string;
-  thinking?: string;
-  pending?: boolean;
-  stopped?: boolean;
-};
-
-export type CoachChat = {
-  id: string;
-  userId: string;
-  title: string;
-  messages: CoachMessage[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type UserLimits = {
-  dailyCanLimit?: number;
-  dailySpendLimit?: number;
-  stopTime?: string;
-};
-
-export type LimitViolation = "cans" | "spend" | "stopTime";
-
-export type LimitCheckResult = {
-  violations: LimitViolation[];
-  projectedCans: number;
-  projectedSpend: number;
-  todayCans: number;
-  todaySpend: number;
-  pastStopTime: boolean;
 };

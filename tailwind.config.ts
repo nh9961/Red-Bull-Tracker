@@ -6,21 +6,20 @@ export default {
     extend: {
       fontFamily: {
         display: [
-          "Google Sans",
-          "Google Sans Text",
-          "Product Sans",
-          "Roboto",
+          "SF Pro Display",
+          "SF Pro Text",
           "-apple-system",
           "BlinkMacSystemFont",
+          "Avenir Next",
+          "Helvetica Neue",
           "sans-serif",
         ],
         body: [
-          "Google Sans",
-          "Google Sans Text",
-          "Product Sans",
-          "Roboto",
+          "SF Pro Text",
           "-apple-system",
           "BlinkMacSystemFont",
+          "Avenir Next",
+          "Helvetica Neue",
           "sans-serif",
         ],
       },
@@ -39,11 +38,11 @@ export default {
         },
       },
       boxShadow: {
-        apple: "0 1px 2px rgba(69, 54, 62, 0.14), 0 2px 6px rgba(69, 54, 62, 0.08)",
-        fridge: "0 2px 6px rgba(69, 54, 62, 0.12), 0 8px 18px rgba(69, 54, 62, 0.08)",
-        can: "0 1px 2px rgba(156, 65, 104, 0.18), 0 3px 8px rgba(156, 65, 104, 0.10)",
-        redline: "0 2px 8px rgba(186, 26, 26, 0.20)",
-        cyan: "0 1px 2px rgba(156, 65, 104, 0.16), 0 4px 12px rgba(156, 65, 104, 0.10)",
+        apple: "0 18px 55px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.18)",
+        fridge: "0 18px 70px rgba(0, 0, 0, 0.34), 0 1px 2px rgba(255, 255, 255, 0.06)",
+        can: "0 10px 24px rgba(57, 213, 255, 0.12)",
+        redline: "0 12px 28px rgba(255, 52, 72, 0.26)",
+        cyan: "0 14px 32px rgba(57, 213, 255, 0.18)",
       },
       backgroundImage: {
         "carbon-grid":
