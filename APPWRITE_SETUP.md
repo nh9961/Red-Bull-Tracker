@@ -21,6 +21,14 @@ cp .env.example .env.local
 
 This app uses only the Appwrite browser SDK. Do not add an API key to the frontend.
 
+To create/update the database tables from this repo, set a server/admin key as `APPWRITE_API_KEY` in `.env.local` and run:
+
+```bash
+npm run setup:appwrite
+```
+
+The setup script reads `APPWRITE_API_KEY` only from Node, never from browser code.
+
 Configured defaults:
 
 - Endpoint: `https://fra.cloud.appwrite.io/v1`
@@ -28,6 +36,7 @@ Configured defaults:
 - Project name: `Red Bull Tracker App`
 - Database ID: `redbull_tracker`
 - Collection ID: `intake_entries`
+- Chat collection ID: `coach_chats`
 
 `client.ping()` is called automatically during app boot in `src/App.tsx` through `pingAppwrite()` from `src/lib/appwrite.ts`.
 
@@ -154,11 +163,48 @@ Recommended indexes:
 - `user_import_key`: key index on `userId`, `importKey`
 - Optional unique index on `userId`, `importKey` if your Appwrite plan/schema supports it
 
+## Encrypted Coach Chats
+
+Create a second table with ID:
+
+```text
+coach_chats
+```
+
+Enable row security on `coach_chats`.
+
+Recommended table-level permissions:
+
+- Create: `users`
+- Read: none
+- Update: none
+- Delete: none
+
+The app encrypts chat titles and messages in the browser before writing rows. The encryption passphrase is not stored, and Appwrite only receives ciphertext.
+
+Create these chat columns:
+
+| Key | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `userId` | String, 64 | Yes | Current Appwrite user ID |
+| `encryptedTitle` | String, 4000 | Yes | AES-GCM ciphertext |
+| `encryptedMessages` | String, 50000+ | Yes | AES-GCM ciphertext for message JSON |
+| `titleIv` | String, 128 | Yes | Base64 IV |
+| `messagesIv` | String, 128 | Yes | Base64 IV |
+| `salt` | String, 128 | Yes | Base64 PBKDF2 salt |
+| `version` | Integer | Yes | Crypto version |
+| `updatedAt` | DateTime | Yes | Sort key |
+
+Recommended chat index:
+
+- `user_chat_updated`: key index on `userId`, `updatedAt`
+
 ## Component Structure
 
-- `src/App.tsx`: UI shell, auth gate, dashboard/logbook/trends/data views, modals, and action state.
+- `src/App.tsx`: UI shell, auth gate, dashboard/logbook/trends/coach/data views, modals, and action state.
 - `src/lib/appwrite.ts`: Appwrite SDK client, account/database services, env config, and ping helper.
 - `src/lib/appwriteEntries.ts`: User-scoped Appwrite CRUD, document permissions, duplicate signatures.
+- `src/lib/encryptedChats.ts`: Client-side encrypted chat storage for Appwrite.
 - `src/lib/excel.ts`: Styled `.xlsx` export, summary sheet, row validation, duplicate-aware import preview.
 - `src/lib/metrics.ts`: Prices, caffeine/sugar estimates, stats, grouping, streaks.
 - `src/lib/storage.ts`: JSON backup export/import parser.

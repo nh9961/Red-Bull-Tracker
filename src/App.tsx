@@ -2,6 +2,7 @@ import type { Models } from "appwrite";
 import {
   Activity,
   AlertTriangle,
+  Brain,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -16,15 +17,21 @@ import {
   Home,
   LineChart,
   Loader2,
+  Lock,
   LogIn,
   LogOut,
+  MessageCircle,
+  MessageSquarePlus,
   Plus,
   PoundSterling,
   RefreshCcw,
   RotateCcw,
+  Send,
   Search,
   Settings2,
   ShieldCheck,
+  Sparkles,
+  Square,
   TimerReset,
   Trash2,
   Upload,
@@ -61,6 +68,16 @@ import {
   YAxis,
 } from "recharts";
 import { BUILT_IN_FLAVOURS, DEFAULT_FLAVOUR, accentForCustomFlavour, flavourMeta, mergedFlavours } from "./data/flavours";
+import {
+  APP_THEMES,
+  THEME_CATEGORIES,
+  THEME_STORAGE_KEY,
+  getThemeById,
+  readStoredThemeId,
+  type AppTheme,
+  type ThemeCategory,
+} from "./data/themes";
+import { themeTokensToStyle } from "./lib/themeTokens";
 import { account, appwriteConfig, Channel, client, OAuthProvider, pingAppwrite } from "./lib/appwrite";
 import {
   appwriteErrorMessage,
@@ -71,6 +88,13 @@ import {
   listEntries,
   updateEntry,
 } from "./lib/appwriteEntries";
+import {
+  chatStorageErrorMessage,
+  createEncryptedChat,
+  deleteEncryptedChat,
+  listEncryptedChats,
+  updateEncryptedChat,
+} from "./lib/encryptedChats";
 import { createExcelExport, downloadBlob, parseExcelImport } from "./lib/excel";
 import {
   caffeineFor,
@@ -99,15 +123,15 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
 
-type AppView = "overview" | "logbook" | "trends" | "data";
+type AppView = "overview" | "logbook" | "trends" | "coach" | "settings";
 type AuthMode = "login" | "signup";
-type AccentTheme = "blue" | "pink";
 type AuthUser = Models.User<Models.Preferences>;
 type SetupStatus = { state: "checking" | "ok" | "error"; message: string };
-
-const ACCENT_STORAGE_KEY = "red-bull-intake-tracker.accent.v1";
+type OllamaStreamChunk = { error?: string; message?: { content?: string; thinking?: string } };
+const OLLAMA_MODEL = "deepseek-v4-pro:cloud";
+const OLLAMA_PROXY_URL = import.meta.env.VITE_OLLAMA_PROXY_URL?.trim() || "/api/ollama-chat";
 
 const DEFAULT_FILTERS: Filters = {
   flavour: "all",
@@ -128,16 +152,14 @@ const NAV_ITEMS: Array<{ id: AppView; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "logbook", label: "Logbook", icon: CalendarDays },
   { id: "trends", label: "Trends", icon: LineChart },
-  { id: "data", label: "Data", icon: Settings2 },
-];
-
-const ACCENT_OPTIONS: Array<{ id: AccentTheme; label: string }> = [
-  { id: "blue", label: "Baby blue" },
-  { id: "pink", label: "Pastel pink" },
+  { id: "coach", label: "Coach", icon: MessageCircle },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
 function App() {
-  const [themeAccent, setThemeAccent] = useState<AccentTheme>(() => readStoredAccent());
+  const [themeId, setThemeId] = useState(() => readStoredThemeId());
+  const activeTheme = useMemo(() => getThemeById(themeId), [themeId]);
+  const shellStyle = useMemo(() => themeTokensToStyle(activeTheme.tokens), [activeTheme]);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -160,8 +182,8 @@ function App() {
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    localStorage.setItem(ACCENT_STORAGE_KEY, themeAccent);
-  }, [themeAccent]);
+    localStorage.setItem(THEME_STORAGE_KEY, themeId);
+  }, [themeId]);
 
   const refreshEntries = useCallback(async (userId: string, showLoader = true) => {
     if (showLoader) setDataLoading(true);
@@ -485,17 +507,17 @@ function App() {
   }
 
   if (authLoading) {
-    return <LoadingScreen setupStatus={setupStatus} themeAccent={themeAccent} />;
+    return <LoadingScreen setupStatus={setupStatus} shellStyle={shellStyle} themeId={themeId} />;
   }
 
   if (!user) {
     return (
       <AuthView
-        accent={themeAccent}
         authError={authError}
         busy={actionLoading === "auth" || actionLoading === "oauth"}
         setupStatus={setupStatus}
-        onAccentChange={setThemeAccent}
+        shellStyle={shellStyle}
+        themeId={themeId}
         onLogin={login}
         onOAuth={startOAuth}
         onSignup={signup}
@@ -504,7 +526,11 @@ function App() {
   }
 
   return (
-    <div className="app-shell min-h-screen overflow-x-hidden bg-[#050711] text-slate-100" data-accent={themeAccent}>
+    <div
+      className="app-shell min-h-screen overflow-x-hidden bg-[#050711] text-slate-100"
+      data-theme={themeId}
+      style={shellStyle}
+    >
       <input
         ref={excelFileInputRef}
         className="hidden"
@@ -524,31 +550,30 @@ function App() {
 
       <div className="mx-auto grid w-full max-w-[1680px] gap-4 px-3 py-3 lg:grid-cols-[280px_1fr] lg:px-5 lg:py-5">
         <Sidebar
-          accent={themeAccent}
           activeView={activeView}
           dataLoading={dataLoading}
           notice={notice}
           setupStatus={setupStatus}
           user={user}
-          onAccentChange={setThemeAccent}
+          onAdd={openNewEntry}
           onChange={setActiveView}
-          onLogout={() => void logout()}
+          onOpenSettings={() => setActiveView("settings")}
         />
 
         <div className="min-w-0">
           <MobileNav activeView={activeView} onChange={setActiveView} />
 
           <TopBar
-            accent={themeAccent}
+            activeTheme={activeTheme}
             activeView={activeView}
             actionLoading={actionLoading}
             dataLoading={dataLoading}
             entries={entries}
             user={user}
-            onAccentChange={setThemeAccent}
             onAdd={openNewEntry}
             onExportExcel={() => void exportExcel()}
             onImportExcel={() => excelFileInputRef.current?.click()}
+            onOpenSettings={() => setActiveView("settings")}
             onRefresh={() => void refreshEntries(user.$id)}
           />
 
@@ -572,8 +597,10 @@ function App() {
                   recentEntries={recentEntries}
                   chartData={chartData}
                   flavourData={flavourData}
+                  user={user}
                   onQuickAdd={(item) => void quickAdd(item)}
                   onAdd={openNewEntry}
+                  onOpenCoach={() => setActiveView("coach")}
                   onOpenLogbook={() => setActiveView("logbook")}
                 />
               )}
@@ -607,16 +634,26 @@ function App() {
                 />
               )}
 
-              {activeView === "data" && (
-                <DataView
+              {activeView === "coach" && <CoachView dashboard={dashboard} entries={entries} user={user} />}
+
+              {activeView === "settings" && (
+                <SettingsView
+                  activeTheme={activeTheme}
                   dashboard={dashboard}
+                  dataLoading={dataLoading}
                   entries={entries}
+                  notice={notice}
+                  setupStatus={setupStatus}
+                  themeId={themeId}
+                  user={user}
                   actionLoading={actionLoading}
                   onExportExcel={() => void exportExcel()}
                   onImportExcel={() => excelFileInputRef.current?.click()}
                   onExportJson={exportJson}
                   onImportJson={() => jsonFileInputRef.current?.click()}
+                  onLogout={() => void logout()}
                   onReset={() => setIsResetOpen(true)}
+                  onThemeChange={setThemeId}
                 />
               )}
             </motion.main>
@@ -666,9 +703,17 @@ function ShellBackdrop() {
   );
 }
 
-function LoadingScreen({ setupStatus, themeAccent }: { setupStatus: SetupStatus; themeAccent: AccentTheme }) {
+function LoadingScreen({
+  setupStatus,
+  shellStyle,
+  themeId,
+}: {
+  setupStatus: SetupStatus;
+  shellStyle: CSSProperties;
+  themeId: string;
+}) {
   return (
-    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-accent={themeAccent}>
+    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-theme={themeId} style={shellStyle}>
       <ShellBackdrop />
       <div className="flex min-h-screen items-center justify-center p-6">
         <div className="glass-panel w-full max-w-md p-6 text-center">
@@ -684,20 +729,20 @@ function LoadingScreen({ setupStatus, themeAccent }: { setupStatus: SetupStatus;
 }
 
 function AuthView({
-  accent,
   authError,
   busy,
   setupStatus,
-  onAccentChange,
+  shellStyle,
+  themeId,
   onLogin,
   onOAuth,
   onSignup,
 }: {
-  accent: AccentTheme;
   authError: string;
   busy: boolean;
   setupStatus: SetupStatus;
-  onAccentChange: (accent: AccentTheme) => void;
+  shellStyle: CSSProperties;
+  themeId: string;
   onLogin: (email: string, password: string) => Promise<void>;
   onOAuth: (provider: "github" | "google") => void;
   onSignup: (name: string, email: string, password: string) => Promise<void>;
@@ -717,7 +762,7 @@ function AuthView({
   }
 
   return (
-    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-accent={accent}>
+    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-theme={themeId} style={shellStyle}>
       <ShellBackdrop />
       <main className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 px-4 py-8 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="min-w-0">
@@ -741,9 +786,6 @@ function AuthView({
               {setupStatus.message}
             </div>
           )}
-          <div className="mt-4 max-w-sm">
-            <AccentPicker accent={accent} onChange={onAccentChange} />
-          </div>
         </section>
 
         <section className="glass-panel p-5 sm:p-6">
@@ -824,50 +866,98 @@ function AuthSignal({ icon: Icon, label, value }: { icon: LucideIcon; label: str
   );
 }
 
-function AccentPicker({
-  accent,
-  onChange,
+function CurrentThemeIndicator({
+  theme,
+  onClick,
 }: {
-  accent: AccentTheme;
-  onChange: (accent: AccentTheme) => void;
+  theme: AppTheme;
+  onClick: () => void;
 }) {
   return (
-    <div className="accent-picker" aria-label="Accent theme">
-      {ACCENT_OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          className={accent === option.id ? "accent-picker-active" : ""}
-          onClick={() => onChange(option.id)}
-        >
-          <span className={`accent-swatch accent-swatch-${option.id}`} aria-hidden="true" />
-          {option.label}
-        </button>
-      ))}
+    <button className="theme-indicator" type="button" onClick={onClick} aria-label={`Theme: ${theme.label}. Open settings.`}>
+      <span className="theme-indicator-swatch" style={{ background: theme.swatch }} aria-hidden="true" />
+      <span className="theme-indicator-label">{theme.label}</span>
+    </button>
+  );
+}
+
+function ThemePicker({
+  themeId,
+  onChange,
+}: {
+  themeId: string;
+  onChange: (id: string) => void;
+}) {
+  const [category, setCategory] = useState<ThemeCategory>("vocaloid");
+  const activeTheme = getThemeById(themeId);
+  const visibleThemes = APP_THEMES.filter((theme) => theme.category === category);
+
+  return (
+    <div className="settings-section">
+      <div className="settings-tabs" role="tablist" aria-label="Theme categories">
+        {THEME_CATEGORIES.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={category === entry.id}
+            className={category === entry.id ? "settings-tab-active" : ""}
+            onClick={() => setCategory(entry.id)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="theme-preview-strip">
+        <div className="theme-preview-chip primary-button px-4 py-2 text-sm">Primary</div>
+        <div className="theme-preview-chip glass-panel px-4 py-2 text-sm">Surface</div>
+        <div className="theme-preview-chip rounded-lg px-4 py-2 text-sm" style={{ background: "var(--chart-secondary)", color: "#fff" }}>
+          Chart
+        </div>
+      </div>
+
+      <div className="theme-picker-grid" role="listbox" aria-label="App themes">
+        {visibleThemes.map((theme) => (
+          <button
+            key={theme.id}
+            type="button"
+            role="option"
+            aria-selected={themeId === theme.id}
+            className={`theme-tile ${themeId === theme.id ? "theme-tile-active" : ""}`}
+            onClick={() => onChange(theme.id)}
+          >
+            <span className="theme-tile-swatch" style={{ background: theme.swatch }} aria-hidden="true" />
+            <span className="theme-tile-label">{theme.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-3 text-sm text-slate-400">
+        Current theme: <span className="font-semibold text-white">{activeTheme.label}</span>
+      </p>
     </div>
   );
 }
 
 function Sidebar({
-  accent,
   activeView,
   dataLoading,
   notice,
   setupStatus,
   user,
-  onAccentChange,
+  onAdd,
   onChange,
-  onLogout,
+  onOpenSettings,
 }: {
-  accent: AccentTheme;
   activeView: AppView;
   dataLoading: boolean;
   notice: string;
   setupStatus: SetupStatus;
   user: AuthUser;
-  onAccentChange: (accent: AccentTheme) => void;
+  onAdd: () => void;
   onChange: (view: AppView) => void;
-  onLogout: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <aside className="glass-panel sticky top-5 hidden h-[calc(100vh-2.5rem)] p-3 lg:flex lg:flex-col">
@@ -895,12 +985,8 @@ function Sidebar({
         ))}
       </nav>
 
-      <div className="mt-4 px-1">
-        <AccentPicker accent={accent} onChange={onAccentChange} />
-      </div>
-
-      <div className="mt-auto grid gap-3">
-        <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
+      <div className="drawer-footer">
+        <div className="drawer-info-card">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
             {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={15} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={15} aria-hidden="true" />}
             Sync
@@ -909,14 +995,10 @@ function Sidebar({
           <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-200" : "text-amber-200"}`}>{setupStatus.message}</p>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
-          <p className="truncate text-sm font-semibold text-white">{user.name || user.email || "Appwrite user"}</p>
-          <p className="mt-1 truncate text-xs text-slate-400">{user.email}</p>
-          <button className="secondary-button mt-3 w-full justify-center" type="button" onClick={onLogout}>
-            <LogOut size={16} aria-hidden="true" />
-            Log out
-          </button>
-        </div>
+        <button className="secondary-button w-full justify-center" type="button" onClick={onOpenSettings}>
+          <User size={16} aria-hidden="true" />
+          {user.name || user.email || "Account & settings"}
+        </button>
       </div>
     </aside>
   );
@@ -943,28 +1025,28 @@ function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (v
 }
 
 function TopBar({
-  accent,
+  activeTheme,
   activeView,
   actionLoading,
   dataLoading,
   entries,
   user,
-  onAccentChange,
   onAdd,
   onExportExcel,
   onImportExcel,
+  onOpenSettings,
   onRefresh,
 }: {
-  accent: AccentTheme;
+  activeTheme: AppTheme;
   activeView: AppView;
   actionLoading: string | null;
   dataLoading: boolean;
   entries: RedBullEntry[];
   user: AuthUser;
-  onAccentChange: (accent: AccentTheme) => void;
   onAdd: () => void;
   onExportExcel: () => void;
   onImportExcel: () => void;
+  onOpenSettings: () => void;
   onRefresh: () => void;
 }) {
   const title = NAV_ITEMS.find((item) => item.id === activeView)?.label ?? "Overview";
@@ -985,8 +1067,14 @@ function TopBar({
           <h1 className="mt-1 text-4xl font-semibold tracking-tight text-white sm:text-5xl">{title}</h1>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <AccentPicker accent={accent} onChange={onAccentChange} />
+        <div className="top-meta-row">
+          <span className="account-chip">{user.email || "Synced user"}</span>
+          <CurrentThemeIndicator theme={activeTheme} onClick={onOpenSettings} />
+        </div>
+      </div>
+
+      <div className="top-action-row">
+        <div className="top-action-primary">
           <button className="primary-button" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
             <Plus size={18} aria-hidden="true" />
             Add Intake
@@ -1051,8 +1139,10 @@ function OverviewView({
   recentEntries,
   chartData,
   flavourData,
+  user,
   onQuickAdd,
   onAdd,
+  onOpenCoach,
   onOpenLogbook,
 }: {
   dashboard: Dashboard;
@@ -1062,12 +1152,16 @@ function OverviewView({
   recentEntries: RedBullEntry[];
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   flavourData: Array<{ name: string; value: number; spend: number; accent: string }>;
+  user: AuthUser;
   onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void;
   onAdd: () => void;
+  onOpenCoach: () => void;
   onOpenLogbook: () => void;
 }) {
   return (
     <div className="grid gap-4">
+      <GreetingPanel dashboard={dashboard} entries={entries} user={user} onOpenCoach={onOpenCoach} />
+
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <TodayPanel dashboard={dashboard} entries={entries} onAdd={onAdd} />
         <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
@@ -1150,6 +1244,77 @@ function OverviewView({
   );
 }
 
+function GreetingPanel({
+  dashboard,
+  entries,
+  user,
+  onOpenCoach,
+}: {
+  dashboard: Dashboard;
+  entries: RedBullEntry[];
+  user: AuthUser;
+  onOpenCoach: () => void;
+}) {
+  const todayNumber = Number.parseFloat(dashboard.todayCans) || 0;
+  const progress = Math.min(100, Math.round((todayNumber / 4) * 100));
+  const name = firstName(user);
+  const favourite = dashboard.favouriteFlavour === "None yet" ? "still forming" : dashboard.favouriteFlavour;
+  const redBullLabel = todayNumber === 1 ? "Red Bull" : "Red Bulls";
+
+  return (
+    <section className="oura-hero glass-panel p-5 sm:p-6">
+      <div className="grid gap-5 xl:grid-cols-[auto_1fr_auto] xl:items-center">
+        <div className="oura-ring" style={{ "--progress": `${progress}%` } as CSSProperties} aria-label={`${progress}% of daily guide`}>
+          <div>
+            <span>{dashboard.todayCans}</span>
+            <small>today</small>
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-400">
+            <Sparkles size={14} aria-hidden="true" />
+            Daily readiness
+          </div>
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            Hey {name}, you've had {dashboard.todayCans} {redBullLabel} today and your favourite flavour is {favourite}.
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+            Clean caffeine, sugar, spend, and streak signals in one glance.
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[390px] xl:grid-cols-1">
+          <WellnessPill label="Caffeine" value={dashboard.todayCaffeine} />
+          <WellnessPill label="Sugar" value={dashboard.todaySugar} />
+          <WellnessPill label="Entries" value={`${entries.length}`} />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-2 md:grid-cols-3">
+        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
+          Ask Coach for today's pace
+        </button>
+        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
+          Get a sugar-free swap idea
+        </button>
+        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
+          Review weekly spend trend
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function WellnessPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="wellness-pill">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function TodayPanel({
   dashboard,
   entries,
@@ -1160,8 +1325,7 @@ function TodayPanel({
   onAdd: () => void;
 }) {
   return (
-    <section className="can-panel relative overflow-hidden p-5 sm:p-7">
-      <div className="absolute right-5 top-5 hidden h-24 w-16 rotate-6 rounded-[18px] border border-cyan-200/25 bg-[linear-gradient(120deg,rgba(255,255,255,0.20),rgba(57,213,255,0.14),rgba(255,52,72,0.12))] shadow-cyan sm:block" />
+    <section className="can-panel today-panel relative overflow-hidden p-5 sm:p-7">
       <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Today</p>
       <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -1361,68 +1525,535 @@ function TrendsView({
   );
 }
 
-function DataView({
+function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries: RedBullEntry[]; user: AuthUser }) {
+  const [chats, setChats] = useState<CoachChat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [savedChatIds, setSavedChatIds] = useState<Set<string>>(() => new Set());
+  const [chatKey, setChatKey] = useState("");
+  const [chatKeyInput, setChatKeyInput] = useState("");
+  const [chatStorageStatus, setChatStorageStatus] = useState("unlock encrypted chat storage");
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [openThinkingIds, setOpenThinkingIds] = useState<string[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
+  const messages = useMemo(() => activeChat?.messages ?? [], [activeChat]);
+  const visibleMessages = useMemo(() => messages.filter((message) => message.id !== "coach-welcome"), [messages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [activeChatId, messages]);
+
+  const quickPrompts = [
+    "what does my red bull pattern say about today?",
+    "give me one lower-sugar swap based on my favourite flavour.",
+    "how should i pace caffeine for the rest of the day?",
+  ];
+
+  async function unlockChats(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const passphrase = chatKeyInput.trim();
+    if (!passphrase) return;
+
+    setBusy(true);
+    setError("");
+    setChatStorageStatus("opening encrypted appwrite chats...");
+    try {
+      const savedChats = await listEncryptedChats(user.$id, passphrase);
+      const initialChats = savedChats.length ? savedChats : [buildNewCoachChat(user)];
+      setChatKey(passphrase);
+      setChats(initialChats);
+      setSavedChatIds(new Set(savedChats.map((chat) => chat.id)));
+      setActiveChatId(initialChats[0].id);
+      setChatStorageStatus(savedChats.length ? `${savedChats.length} encrypted chat${savedChats.length === 1 ? "" : "s"} loaded` : "new encrypted chat ready");
+    } catch (caught) {
+      const message = chatStorageErrorMessage(caught);
+      setError(message);
+      setChatKey("");
+      setChatStorageStatus("encrypted chat unlock failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startNewChat() {
+    if (!chatKey) return;
+    const chat = buildNewCoachChat(user);
+    setChats((current) => [chat, ...current]);
+    setActiveChatId(chat.id);
+    setInput("");
+    setError("");
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await sendPrompt(input);
+  }
+
+  async function sendPrompt(prompt: string) {
+    const trimmed = prompt.trim();
+    if (!trimmed || busy) return;
+    if (!chatKey) {
+      setError("unlock encrypted chat storage first.");
+      return;
+    }
+
+    const currentChat = activeChat ?? buildNewCoachChat(user);
+    const userMessage: CoachMessage = { id: makeId(), role: "user", content: trimmed };
+    const assistantId = makeId();
+    const assistantMessage: CoachMessage = { id: assistantId, role: "assistant", content: "", thinking: "", pending: true };
+    const conversation = [...currentChat.messages, userMessage];
+    const now = new Date().toISOString();
+    const draftChat: CoachChat = {
+      ...currentChat,
+      title: titleForChat(currentChat.title, trimmed),
+      messages: [...conversation, assistantMessage],
+      updatedAt: now,
+    };
+
+    upsertChatState(draftChat);
+    setActiveChatId(draftChat.id);
+    setInput("");
+    setBusy(true);
+    setError("");
+
+    let streamedContent = "";
+    let streamedThinking = "";
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    try {
+      const requestMessages: Array<{ role: string; content: string; thinking?: string }> = [
+        { role: "system", content: buildCoachSystemPrompt(user, dashboard, entries) },
+        ...conversation
+          .filter((message) => message.content.trim().length > 0)
+          .map((message) => ({
+            role: message.role,
+            content: message.content,
+            ...(message.thinking ? { thinking: message.thinking } : {}),
+          })),
+      ];
+
+      const response = await fetch(OLLAMA_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: requestMessages,
+          stream: true,
+          think: true,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `Ollama request failed with status ${response.status}.`);
+      }
+      if (!response.body) {
+        throw new Error("Streaming response was empty.");
+      }
+
+      await readOllamaStream(response.body, (chunk) => {
+        if (chunk.error) throw new Error(chunk.error);
+        if (chunk.message?.thinking) streamedThinking += chunk.message.thinking;
+        if (chunk.message?.content) streamedContent += chunk.message.content.toLocaleLowerCase();
+
+        patchAssistantMessage(draftChat.id, assistantId, {
+          content: streamedContent,
+          thinking: streamedThinking,
+          pending: true,
+        });
+      });
+
+      const finalChat = withAssistantMessage(draftChat, assistantId, {
+        content: streamedContent || "no answer returned.",
+        thinking: streamedThinking,
+        pending: false,
+      });
+      upsertChatState(finalChat);
+      await persistChat(finalChat);
+    } catch (caught) {
+      const aborted = abortController.signal.aborted;
+      const message = caught instanceof Error ? caught.message : "Coach request failed.";
+      const finalChat = withAssistantMessage(draftChat, assistantId, {
+        content: aborted ? streamedContent || "stopped thinking." : `coach unavailable: ${message}`.toLocaleLowerCase(),
+        thinking: streamedThinking,
+        pending: false,
+        stopped: aborted,
+      });
+      upsertChatState(finalChat);
+      await persistChat(finalChat);
+      if (!aborted) setError(message);
+    } finally {
+      abortRef.current = null;
+      setBusy(false);
+    }
+  }
+
+  function stopThinking() {
+    abortRef.current?.abort();
+  }
+
+  function toggleThinking(id: string) {
+    setOpenThinkingIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  }
+
+  function upsertChatState(chat: CoachChat) {
+    setChats((current) => {
+      const exists = current.some((item) => item.id === chat.id);
+      return exists ? current.map((item) => (item.id === chat.id ? chat : item)) : [chat, ...current];
+    });
+  }
+
+  function patchAssistantMessage(chatId: string, messageId: string, patch: Partial<CoachMessage>) {
+    setChats((current) =>
+      current.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              updatedAt: new Date().toISOString(),
+              messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
+            }
+          : chat,
+      ),
+    );
+  }
+
+  function withAssistantMessage(chat: CoachChat, messageId: string, patch: Partial<CoachMessage>): CoachChat {
+    return {
+      ...chat,
+      updatedAt: new Date().toISOString(),
+      messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
+    };
+  }
+
+  async function persistChat(chat: CoachChat) {
+    if (!chatKey) return;
+    try {
+      const saved = savedChatIds.has(chat.id)
+        ? await updateEncryptedChat(user.$id, chatKey, chat)
+        : await createEncryptedChat(user.$id, chatKey, chat);
+      setSavedChatIds((current) => new Set(current).add(saved.id));
+      upsertChatState(saved);
+      setChatStorageStatus("encrypted chat saved to appwrite");
+    } catch (caught) {
+      setChatStorageStatus("encrypted chat save failed");
+      setError(chatStorageErrorMessage(caught));
+    }
+  }
+
+  async function removeChat(chatId: string) {
+    if (busy) return;
+    try {
+      if (savedChatIds.has(chatId)) await deleteEncryptedChat(chatId);
+      setSavedChatIds((current) => {
+        const next = new Set(current);
+        next.delete(chatId);
+        return next;
+      });
+      setChats((current) => {
+        const next = current.filter((chat) => chat.id !== chatId);
+        const fallback = buildNewCoachChat(user);
+        setActiveChatId(next[0]?.id ?? fallback.id);
+        return next.length ? next : [fallback];
+      });
+      setChatStorageStatus("encrypted chat deleted");
+    } catch (caught) {
+      setError(chatStorageErrorMessage(caught));
+    }
+  }
+
+  if (!chatKey) {
+    return (
+      <section className="coach-gemini-shell coach-locked-shell">
+        <div className="coach-empty-state">
+          <div className="coach-brand-orb">
+            <Lock size={30} aria-hidden="true" />
+          </div>
+          <h2>unlock encrypted coach chats</h2>
+          <p>
+            messages encrypt in this browser before appwrite stores them. the passphrase is never saved, so use the same one on every device.
+          </p>
+          <form className="coach-unlock-card" onSubmit={unlockChats}>
+            <input
+              className="coach-input"
+              type="password"
+              value={chatKeyInput}
+              onChange={(event) => setChatKeyInput(event.target.value)}
+              placeholder="encryption passphrase"
+              autoComplete="current-password"
+            />
+            <button className="primary-button" type="submit" disabled={busy || !chatKeyInput.trim()}>
+              {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <Lock size={17} aria-hidden="true" />}
+              unlock
+            </button>
+          </form>
+          {error && <p className="mt-4 max-w-xl text-sm text-red-100">{error}</p>}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="coach-gemini-shell">
+      <aside className="coach-chat-sidebar">
+        <div className="coach-sidebar-brand">
+          <div className="coach-brand-orb coach-brand-orb-small">
+            <Brain size={18} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="font-semibold text-white">coach</p>
+            <p className="text-xs text-slate-400">{chatStorageStatus}</p>
+          </div>
+        </div>
+
+        <button className="coach-new-chat" type="button" onClick={startNewChat} disabled={busy}>
+          <MessageSquarePlus size={18} aria-hidden="true" />
+          new chat
+        </button>
+
+        <div className="coach-chat-list">
+          {chats.map((chat) => (
+            <div key={chat.id} className={`coach-chat-row ${chat.id === activeChatId ? "coach-chat-row-active" : ""}`}>
+              <button type="button" onClick={() => setActiveChatId(chat.id)}>
+                <span>{chat.title}</span>
+                <small>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(chat.updatedAt))}</small>
+              </button>
+              <button type="button" aria-label={`delete ${chat.title}`} onClick={() => void removeChat(chat.id)} disabled={busy}>
+                <Trash2 size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="coach-context-card">
+          <p className="text-xs font-semibold uppercase text-slate-500">today</p>
+          <div className="mt-3 grid gap-2">
+            <WellnessPill label="cans" value={dashboard.todayCans} />
+            <WellnessPill label="caffeine" value={dashboard.todayCaffeine} />
+            <WellnessPill label="favourite" value={dashboard.favouriteFlavour} />
+          </div>
+        </div>
+      </aside>
+
+      <section className="coach-stage">
+        <div className="coach-stage-topbar">
+          <span>{OLLAMA_MODEL}</span>
+          <span>{busy ? "thinking" : "ready"}</span>
+        </div>
+
+        <div className="coach-stage-messages" aria-live="polite">
+          {!visibleMessages.length ? (
+            <div className="coach-empty-state">
+              <div className="coach-brand-orb">
+                <Sparkles size={32} aria-hidden="true" />
+              </div>
+              <h2>ready when you are</h2>
+              <p>ask about caffeine pace, sugar, spend, or your flavour pattern. answers stay lower case.</p>
+              <div className="coach-prompt-grid">
+                {quickPrompts.map((prompt) => (
+                  <button key={prompt} className="suggestion-chip" type="button" disabled={busy} onClick={() => void sendPrompt(prompt)}>
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            visibleMessages.map((message) => (
+              <CoachMessageBubble
+                key={message.id}
+                message={message}
+                thinkingOpen={openThinkingIds.includes(message.id)}
+                onToggleThinking={() => toggleThinking(message.id)}
+              />
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {error && (
+          <div className="mx-4 mb-3 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+
+        <form className="coach-composer" onSubmit={submit}>
+          <button className="composer-icon-button" type="button" onClick={startNewChat} disabled={busy} aria-label="new chat">
+            <Plus size={22} aria-hidden="true" />
+          </button>
+          <input
+            className="coach-input"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="ask coach"
+            disabled={busy}
+          />
+          {busy ? (
+            <button className="composer-send-button composer-stop-button" type="button" onClick={stopThinking} aria-label="stop thinking">
+              <Square size={18} aria-hidden="true" />
+            </button>
+          ) : (
+            <button className="composer-send-button" type="submit" disabled={!input.trim()} aria-label="send coach message">
+              <Send size={20} aria-hidden="true" />
+            </button>
+          )}
+        </form>
+      </section>
+    </section>
+  );
+}
+
+function CoachMessageBubble({
+  message,
+  thinkingOpen,
+  onToggleThinking,
+}: {
+  message: CoachMessage;
+  thinkingOpen: boolean;
+  onToggleThinking: () => void;
+}) {
+  const isAssistant = message.role === "assistant";
+  const canShowThinking = isAssistant && (message.pending || Boolean(message.thinking));
+  const thinkingLabel = message.stopped ? "stopped thinking" : message.pending ? "thinking" : "thinking";
+
+  return (
+    <article className={`coach-message coach-message-${message.role}`}>
+      <div className="coach-message-bubble">
+        <p className="text-xs font-semibold uppercase text-slate-500">{isAssistant ? "coach" : "you"}</p>
+        <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white">
+          {message.content || (message.pending ? "streaming response..." : "")}
+        </div>
+
+        {canShowThinking && (
+          <div className="mt-3">
+            <button className={`thinking-slider ${message.pending ? "thinking-slider-active" : ""}`} type="button" onClick={onToggleThinking}>
+              <span className="thinking-slider-track">
+                <span>{thinkingLabel} · click to reveal reasoning</span>
+              </span>
+            </button>
+            <AnimatePresence>
+              {thinkingOpen && (
+                <motion.pre
+                  className="thinking-trace"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  {message.thinking || "waiting for reasoning trace..."}
+                </motion.pre>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function SettingsView({
+  activeTheme,
   dashboard,
+  dataLoading,
   entries,
+  notice,
+  setupStatus,
+  themeId,
+  user,
   actionLoading,
   onExportExcel,
   onImportExcel,
   onExportJson,
   onImportJson,
+  onLogout,
   onReset,
+  onThemeChange,
 }: {
+  activeTheme: AppTheme;
   dashboard: Dashboard;
+  dataLoading: boolean;
   entries: RedBullEntry[];
+  notice: string;
+  setupStatus: SetupStatus;
+  themeId: string;
+  user: AuthUser;
   actionLoading: string | null;
   onExportExcel: () => void;
   onImportExcel: () => void;
   onExportJson: () => void;
   onImportJson: () => void;
+  onLogout: () => void;
   onReset: () => void;
+  onThemeChange: (id: string) => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
-      <AppCard title="Appwrite storage" subtitle={`${entries.length} entries synced for this user`}>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MiniMetric label="All-time cans" value={dashboard.allTimeCans} accent="#39d5ff" />
-          <MiniMetric label="Total spend" value={dashboard.totalSpend} accent="#ffd84d" />
-          <MiniMetric label="Favourite" value={dashboard.favouriteFlavour} accent="#ffb7d9" />
-        </div>
+      <div className="grid gap-4">
+        <AppCard title="Account" subtitle="Your Appwrite profile and sync status">
+          <div className="rounded-lg border border-white/10 bg-white/[0.05] p-4">
+            <p className="text-lg font-semibold text-white">{user.name || "Appwrite user"}</p>
+            <p className="mt-1 text-sm text-slate-400">{user.email}</p>
+            <div className="mt-4 flex items-center gap-2 text-sm text-slate-300">
+              {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={16} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={16} aria-hidden="true" />}
+              {notice}
+            </div>
+            <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-200" : "text-amber-200"}`}>{setupStatus.message}</p>
+            <button className="secondary-button mt-4 justify-center" type="button" onClick={onLogout}>
+              <LogOut size={17} aria-hidden="true" />
+              Log out
+            </button>
+          </div>
+        </AppCard>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <button className="excel-button justify-center" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
-            <FileSpreadsheet size={17} aria-hidden="true" />
-            Export XLSX
-          </button>
-          <button className="excel-button justify-center" type="button" onClick={onImportExcel} disabled={Boolean(actionLoading)}>
-            <Upload size={17} aria-hidden="true" />
-            Import XLSX
-          </button>
-          <button className="secondary-button justify-center" type="button" onClick={onExportJson} disabled={!entries.length || Boolean(actionLoading)}>
-            <FileJson size={17} aria-hidden="true" />
-            Export JSON
-          </button>
-          <button className="secondary-button justify-center" type="button" onClick={onImportJson} disabled={Boolean(actionLoading)}>
-            <Upload size={17} aria-hidden="true" />
-            Import JSON
-          </button>
-        </div>
+        <AppCard title="Appearance" subtitle={`${activeTheme.label} theme active`}>
+          <ThemePicker themeId={themeId} onChange={onThemeChange} />
+        </AppCard>
 
-        <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-4">
-          <p className="text-sm font-semibold text-white">Configured Appwrite IDs</p>
-          <dl className="mt-3 grid gap-2 text-sm text-slate-300">
-            <DataPair label="Endpoint" value={appwriteConfig.endpoint} />
-            <DataPair label="Project" value={appwriteConfig.projectId} />
-            <DataPair label="Database" value={appwriteConfig.databaseId} />
-            <DataPair label="Collection" value={appwriteConfig.collectionId} />
-          </dl>
-        </div>
+        <AppCard title="Data & sync" subtitle={`${entries.length} entries synced for this user`}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniMetric label="All-time cans" value={dashboard.allTimeCans} accent={MATERIAL_ACCENTS.primary} />
+            <MiniMetric label="Total spend" value={dashboard.totalSpend} accent={MATERIAL_ACCENTS.tertiary} />
+            <MiniMetric label="Favourite" value={dashboard.favouriteFlavour} accent={MATERIAL_ACCENTS.secondary} />
+          </div>
 
-        <button className="danger-button mt-5 justify-center" type="button" onClick={onReset} disabled={!entries.length || Boolean(actionLoading)}>
-          <RotateCcw size={17} aria-hidden="true" />
-          Delete all entries
-        </button>
-      </AppCard>
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button className="excel-button justify-center" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
+              <FileSpreadsheet size={17} aria-hidden="true" />
+              Export XLSX
+            </button>
+            <button className="excel-button justify-center" type="button" onClick={onImportExcel} disabled={Boolean(actionLoading)}>
+              <Upload size={17} aria-hidden="true" />
+              Import XLSX
+            </button>
+            <button className="secondary-button justify-center" type="button" onClick={onExportJson} disabled={!entries.length || Boolean(actionLoading)}>
+              <FileJson size={17} aria-hidden="true" />
+              Export JSON
+            </button>
+            <button className="secondary-button justify-center" type="button" onClick={onImportJson} disabled={Boolean(actionLoading)}>
+              <Upload size={17} aria-hidden="true" />
+              Import JSON
+            </button>
+          </div>
+
+          <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-4">
+            <p className="text-sm font-semibold text-white">Configured Appwrite IDs</p>
+            <dl className="mt-3 grid gap-2 text-sm text-slate-300">
+              <DataPair label="Endpoint" value={appwriteConfig.endpoint} />
+              <DataPair label="Project" value={appwriteConfig.projectId} />
+              <DataPair label="Database" value={appwriteConfig.databaseId} />
+              <DataPair label="Collection" value={appwriteConfig.collectionId} />
+              <DataPair label="Chats" value={appwriteConfig.chatCollectionId} />
+            </dl>
+          </div>
+
+          <button className="danger-button mt-5 justify-center" type="button" onClick={onReset} disabled={!entries.length || Boolean(actionLoading)}>
+            <RotateCcw size={17} aria-hidden="true" />
+            Delete all entries
+          </button>
+        </AppCard>
+      </div>
 
       <div className="grid gap-4">
         <AppCard title="Excel theme" subtitle="Pastel pink and Miku blue workbook">
@@ -2293,6 +2924,90 @@ function formatMetricValue(name: string, value: number) {
   return oneDecimal.format(value);
 }
 
+async function readOllamaStream(stream: ReadableStream<Uint8Array>, onChunk: (chunk: OllamaStreamChunk) => void) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  function processLine(line: string) {
+    const chunk = parseOllamaLine(line);
+    if (chunk) onChunk(chunk);
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    lines.forEach(processLine);
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) processLine(buffer);
+}
+
+function parseOllamaLine(line: string): OllamaStreamChunk | null {
+  const trimmed = line.trim().replace(/^data:\s*/, "");
+  if (!trimmed || trimmed === "[DONE]") return null;
+  try {
+    return JSON.parse(trimmed) as OllamaStreamChunk;
+  } catch {
+    return null;
+  }
+}
+
+function buildCoachSystemPrompt(user: AuthUser, dashboard: Dashboard, entries: RedBullEntry[]) {
+  const recent = entries
+    .slice(0, 12)
+    .map(
+      (entry) =>
+        `- ${humanDateTime(entry.dateTime)}: ${entry.cans} can(s), ${entry.flavour}, ${entry.sizeMl}ml, ${currency.format(spendFor(entry))}, ${wholeNumber.format(caffeineFor(entry))}mg caffeine, ${oneDecimal.format(sugarFor(entry))}g sugar`,
+    )
+    .join("\n");
+
+  return [
+    "You are an upbeat Red Bull intake coach inside a tracking app.",
+    "Respond entirely in lower case, including headings and short labels.",
+    "Give concise, practical suggestions based only on the logged data provided.",
+    "Do not give medical advice; suggest checking labels and using personal judgement for caffeine tolerance.",
+    `User: ${user.name || user.email || "Appwrite user"}`,
+    `Today: ${dashboard.todayCans} cans, ${dashboard.todayCaffeine} caffeine, ${dashboard.todaySugar} sugar.`,
+    `Favourite flavour: ${dashboard.favouriteFlavour}. Current streak: ${dashboard.currentStreak} day(s). Total spend: ${dashboard.totalSpend}.`,
+    `Recent entries:\n${recent || "No entries logged yet."}`,
+  ].join("\n");
+}
+
+function buildNewCoachChat(user: AuthUser): CoachChat {
+  const now = new Date().toISOString();
+  return {
+    id: makeId(),
+    userId: user.$id,
+    title: "new chat",
+    createdAt: now,
+    updatedAt: now,
+    messages: [
+      {
+        id: "coach-welcome",
+        role: "assistant",
+        content: `hey ${firstName(user).toLocaleLowerCase()}, i can help with caffeine pace, sugar swaps, spend trends, and smarter quick-add choices.`,
+      },
+    ],
+  };
+}
+
+function titleForChat(currentTitle: string, prompt: string) {
+  if (currentTitle !== "new chat") return currentTitle;
+  const cleaned = prompt.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return cleaned.length > 48 ? `${cleaned.slice(0, 45)}...` : cleaned || "new chat";
+}
+
+function firstName(user: AuthUser) {
+  const fallback = user.email?.split("@")[0] ?? "there";
+  const value = (user.name || fallback).trim();
+  return value.split(/\s+/)[0] || "there";
+}
+
 function sizeToPreset(size: number) {
   if (size === 250 || size === 355 || size === 473) return size.toString();
   return "custom";
@@ -2303,11 +3018,6 @@ function actionLabel(value: string) {
     .replace(/^quick-/, "quick add ")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function readStoredAccent(): AccentTheme {
-  const value = localStorage.getItem(ACCENT_STORAGE_KEY);
-  return value === "pink" ? "pink" : "blue";
 }
 
 export default App;

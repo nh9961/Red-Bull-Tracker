@@ -1,7 +1,6 @@
 /* global console, fetch, process, setTimeout */
 
 import { existsSync, readFileSync } from "node:fs";
-import { URL } from "node:url";
 
 const env = loadEnvFiles([".env", ".env.local"]);
 
@@ -10,11 +9,7 @@ const projectId = readEnv("VITE_APPWRITE_PROJECT_ID", "6a0752ee001fb2ef7138");
 const databaseId = readEnv("VITE_APPWRITE_DATABASE_ID", "redbull_tracker");
 const intakeTableId = readEnv("VITE_APPWRITE_COLLECTION_ID", "intake_entries");
 const chatTableId = readEnv("VITE_APPWRITE_CHAT_COLLECTION_ID", "coach_chats");
-const barcodeTableId = readEnv("VITE_APPWRITE_BARCODE_COLLECTION_ID", "barcode_products");
 const apiKey = readEnv("APPWRITE_API_KEY", "");
-const verifiedBarcodeProducts = JSON.parse(
-  readFileSync(new URL("../src/data/verified-barcodes.json", import.meta.url), "utf8"),
-);
 
 if (!apiKey) {
   throw new Error("APPWRITE_API_KEY missing. Add a server/admin Appwrite key to .env.local, without VITE_.");
@@ -49,49 +44,16 @@ await ensureTable({
   name: "Coach chats",
   columns: [
     { kind: "string", key: "userId", size: 64, required: true },
-    { kind: "string", key: "title", size: 512, required: true },
-    { kind: "longtext", key: "messages", required: true },
+    { kind: "string", key: "encryptedTitle", size: 4000, required: true, encrypt: true },
+    { kind: "longtext", key: "encryptedMessages", required: true, encrypt: true },
+    { kind: "string", key: "titleIv", size: 128, required: true },
+    { kind: "string", key: "messagesIv", size: 128, required: true },
+    { kind: "string", key: "salt", size: 128, required: true },
+    { kind: "integer", key: "version", required: true },
     { kind: "datetime", key: "updatedAt", required: true },
   ],
   indexes: [{ key: "user_chat_updated", type: "key", columns: ["userId", "updatedAt"], orders: ["ASC", "DESC"], lengths: [32] }],
 });
-await retireLegacyChatColumns(chatTableId, [
-  "encryptedTitle",
-  "encryptedMessages",
-  "titleIv",
-  "messagesIv",
-  "salt",
-  "version",
-]);
-await waitForColumns(chatTableId, ["userId", "title", "messages", "updatedAt"]);
-await ensureTable({
-  tableId: barcodeTableId,
-  name: "Barcode products",
-  // Schema notes:
-  // - scope="verified" rows are seeded by this admin script and readable by signed-in users.
-  // - scope="user" rows are created by the browser SDK with per-user row permissions.
-  columns: [
-    { kind: "string", key: "scope", size: 16, required: true },
-    { kind: "string", key: "ownerUserId", size: 64, required: false },
-    { kind: "string", key: "barcode", size: 32, required: true },
-    { kind: "string", key: "flavourName", size: 128, required: true },
-    { kind: "integer", key: "sizeMl", required: true },
-    { kind: "float", key: "pricePerCan", required: true },
-    { kind: "boolean", key: "sugarFree", required: true },
-    { kind: "float", key: "caffeineMgPerCan", required: false },
-    { kind: "string", key: "verifiedBy", size: 512, required: false },
-    { kind: "string", key: "sourceName", size: 512, required: false },
-    { kind: "string", key: "sourceUrl", size: 2048, required: false },
-    { kind: "string", key: "variant", size: 64, required: false },
-    { kind: "string", key: "notes", size: 2000, required: false },
-  ],
-  indexes: [
-    { key: "barcode", type: "key", columns: ["barcode"], orders: ["ASC"], lengths: [32] },
-    { key: "scope_barcode", type: "key", columns: ["scope", "barcode"], orders: ["ASC", "ASC"], lengths: [16, 32] },
-    { key: "user_barcode", type: "key", columns: ["ownerUserId", "barcode"], orders: ["ASC", "ASC"], lengths: [64, 32] },
-  ],
-});
-await seedVerifiedBarcodeProducts(barcodeTableId, verifiedBarcodeProducts);
 
 console.log("Appwrite database and tables ready.");
 
@@ -160,19 +122,6 @@ async function ensureColumn(tableId, column) {
   console.log(`Column ${tableId}.${column.key} created.`);
 }
 
-async function retireLegacyChatColumns(tableId, keys) {
-  for (const key of keys) {
-    const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [200, 404]);
-    if (existing.status === 404) {
-      console.log(`Legacy column ${tableId}.${key} already removed.`);
-      continue;
-    }
-
-    await request("DELETE", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [204, 404]);
-    console.log(`Legacy column ${tableId}.${key} removed.`);
-  }
-}
-
 async function ensureIndex(tableId, index) {
   const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/indexes/${index.key}`, undefined, [200, 404]);
   if (existing.status === 200) {
@@ -187,43 +136,6 @@ async function ensureIndex(tableId, index) {
     [202, 201],
   );
   console.log(`Index ${tableId}.${index.key} created.`);
-}
-
-async function seedVerifiedBarcodeProducts(tableId, products) {
-  for (const [barcode, product] of Object.entries(products)) {
-    const rowId = `verified_${barcode}`;
-    const data = {
-      scope: "verified",
-      ownerUserId: "",
-      barcode,
-      flavourName: product.flavourName,
-      sizeMl: product.sizeMl,
-      pricePerCan: product.pricePerCan,
-      sugarFree: Boolean(product.sugarFree),
-      caffeineMgPerCan: product.caffeineMgPerCan,
-      verifiedBy: product.verifiedBy ?? "",
-      sourceName: product.sourceName ?? "",
-      sourceUrl: product.sourceUrl ?? "",
-      variant: product.variant ?? "",
-      notes: product.notes ?? "",
-    };
-    const path = `/tablesdb/${databaseId}/tables/${tableId}/rows/${rowId}`;
-    const existing = await request("GET", path, undefined, [200, 404]);
-
-    if (existing.status === 404) {
-      await request(
-        "POST",
-        `/tablesdb/${databaseId}/tables/${tableId}/rows`,
-        { rowId, data, permissions: ['read("users")'] },
-        [201],
-      );
-      console.log(`Verified barcode ${barcode} seeded.`);
-      continue;
-    }
-
-    await request("PUT", path, { data, permissions: ['read("users")'] }, [200]);
-    console.log(`Verified barcode ${barcode} updated.`);
-  }
 }
 
 async function waitForColumns(tableId, keys) {
