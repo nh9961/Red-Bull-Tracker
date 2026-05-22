@@ -1785,14 +1785,14 @@ function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries
 
   if (!chatKey) {
     return (
-      <section className="coach-gemini-shell coach-locked-shell">
+      <section className="coach-shell coach-locked-shell">
         <div className="coach-empty-state">
-          <div className="coach-brand-orb">
-            <Lock size={30} aria-hidden="true" />
+          <div className="coach-empty-icon">
+            <Lock size={28} aria-hidden="true" />
           </div>
-          <h2>unlock encrypted coach chats</h2>
+          <h2>unlock coach</h2>
           <p>
-            messages encrypt in this browser before appwrite stores them. the passphrase is never saved, so use the same one on every device.
+            messages are encrypted before appwrite stores them. your passphrase is never saved — use the same one on every device.
           </p>
           <form className="coach-unlock-card" onSubmit={unlockChats}>
             <input
@@ -1808,148 +1808,182 @@ function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries
               unlock
             </button>
           </form>
-          {error && <p className="mt-4 max-w-xl text-sm text-red-100">{error}</p>}
+          {error && <p className="mt-4 max-w-md text-sm" style={{ color: "var(--error)" }}>{error}</p>}
         </div>
       </section>
     );
   }
 
+  const userInitials = user.name
+    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : (user.email?.[0] ?? "U").toUpperCase();
+
   return (
-    <section className="coach-gemini-shell">
-      <aside className="coach-chat-sidebar">
-        <div className="coach-sidebar-brand">
-          <div className="coach-brand-orb coach-brand-orb-small">
-            <Brain size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <p className="font-semibold text-white">coach</p>
-            <p className="text-xs text-slate-400">{chatStorageStatus}</p>
-          </div>
-        </div>
-
-        <button className="coach-new-chat" type="button" onClick={startNewChat} disabled={busy}>
-          <MessageSquarePlus size={18} aria-hidden="true" />
-          new chat
-        </button>
-
-        <div className="coach-chat-list">
-          {chats.map((chat) => (
-            <div key={chat.id} className={`coach-chat-row ${chat.id === activeChatId ? "coach-chat-row-active" : ""}`}>
-              <button type="button" onClick={() => setActiveChatId(chat.id)}>
-                <span>{chat.title}</span>
-                <small>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(chat.updatedAt))}</small>
-              </button>
-              <button type="button" aria-label={`delete ${chat.title}`} onClick={() => void removeChat(chat.id)} disabled={busy}>
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
+    <section className="coach-shell">
+      <div className="coach-layout">
+        <aside className="coach-sidebar">
+          <div className="coach-sidebar-header">
+            <div className="coach-sidebar-icon">
+              <Brain size={18} aria-hidden="true" />
             </div>
-          ))}
-        </div>
-
-        <div className="coach-context-card">
-          <p className="text-xs font-semibold uppercase text-slate-500">today</p>
-          <div className="mt-3 grid gap-2">
-            <WellnessPill label="cans" value={dashboard.todayCans} />
-            <WellnessPill label="caffeine" value={dashboard.todayCaffeine} />
-            <WellnessPill label="favourite" value={dashboard.favouriteFlavour} />
-          </div>
-        </div>
-      </aside>
-
-      <section className="coach-stage">
-        <div className="coach-stage-topbar">
-          <span>{OLLAMA_MODEL}</span>
-          <span>{busy ? "thinking" : "ready"}</span>
-        </div>
-
-        <div className="coach-stage-messages" aria-live="polite">
-          {!visibleMessages.length ? (
-            <div className="coach-empty-state">
-              <div className="coach-brand-orb">
-                <Sparkles size={32} aria-hidden="true" />
-              </div>
-              <h2>ready when you are</h2>
-              <p>ask about caffeine pace, sugar, spend, or your flavour pattern. answers stay lower case.</p>
-              <div className="coach-prompt-grid">
-                {quickPrompts.map((prompt) => (
-                  <button key={prompt} className="suggestion-chip" type="button" disabled={busy} onClick={() => void sendPrompt(prompt)}>
-                    {prompt}
-                  </button>
-                ))}
-              </div>
+            <div className="coach-sidebar-label">
+              <p>coach</p>
+              <p>{chatStorageStatus}</p>
             </div>
-          ) : (
-            visibleMessages.map((message) => (
-              <CoachMessageBubble
-                key={message.id}
-                message={message}
-                thinkingOpen={openThinkingIds.includes(message.id)}
-                onToggleThinking={() => toggleThinking(message.id)}
-              />
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {error && (
-          <div className="mx-4 mb-3 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-            {error}
           </div>
-        )}
 
-        <form className="coach-composer" onSubmit={submit}>
-          <button className="composer-icon-button" type="button" onClick={startNewChat} disabled={busy} aria-label="new chat">
-            <Plus size={22} aria-hidden="true" />
+          <button className="coach-new-chat" type="button" onClick={startNewChat} disabled={busy}>
+            <Plus size={16} aria-hidden="true" />
+            new chat
           </button>
-          <input
-            className="coach-input"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="ask coach"
-            disabled={busy}
-          />
-          {busy ? (
-            <button className="composer-send-button composer-stop-button" type="button" onClick={stopThinking} aria-label="stop thinking">
-              <Square size={18} aria-hidden="true" />
-            </button>
-          ) : (
-            <button className="composer-send-button" type="submit" disabled={!input.trim()} aria-label="send coach message">
-              <Send size={20} aria-hidden="true" />
-            </button>
+
+          <div className="coach-chat-list">
+            {chats.map((chat) => (
+              <div key={chat.id} className={`coach-chat-row ${chat.id === activeChatId ? "coach-chat-row-active" : ""}`}>
+                <button type="button" onClick={() => setActiveChatId(chat.id)}>
+                  <span>{chat.title}</span>
+                  <small>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(chat.updatedAt))}</small>
+                </button>
+                <button type="button" aria-label={`delete ${chat.title}`} onClick={() => void removeChat(chat.id)} disabled={busy}>
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="coach-context-card">
+            <p className="text-xs font-semibold uppercase" style={{ color: "var(--muted)" }}>today</p>
+            <div className="mt-2 grid gap-2">
+              <WellnessPill label="cans" value={dashboard.todayCans} />
+              <WellnessPill label="caffeine" value={dashboard.todayCaffeine} />
+              <WellnessPill label="favourite" value={dashboard.favouriteFlavour} />
+            </div>
+          </div>
+        </aside>
+
+        <section className="coach-main">
+          <div className="coach-topbar">
+            <span className="coach-topbar-status">
+              <span className={`coach-topbar-status-dot ${busy ? "coach-topbar-status-dot-busy" : "coach-topbar-status-dot-ready"}`} />
+              {busy ? "thinking" : "ready"}
+            </span>
+            <span className="coach-topbar-status" style={{ color: "var(--muted)" }}>{OLLAMA_MODEL}</span>
+          </div>
+
+          <div className="coach-messages" aria-live="polite">
+            <div className="coach-messages-inner">
+              {!visibleMessages.length ? (
+                <div className="coach-empty-state">
+                  <div className="coach-empty-icon">
+                    <Sparkles size={28} aria-hidden="true" />
+                  </div>
+                  <h2>how can I help?</h2>
+                  <p>ask about caffeine, sugar, spending, or your flavour patterns.</p>
+                  <div className="coach-prompt-grid">
+                    {quickPrompts.map((prompt) => (
+                      <button key={prompt} className="chat-suggestion-chip" type="button" disabled={busy} onClick={() => void sendPrompt(prompt)}>
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                visibleMessages.map((message) => (
+                  <CoachMessageBubble
+                    key={message.id}
+                    message={message}
+                    userInitials={userInitials}
+                    thinkingOpen={openThinkingIds.includes(message.id)}
+                    onToggleThinking={() => toggleThinking(message.id)}
+                  />
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {error && (
+            <div className="coach-error">
+              <div className="coach-error-inner">
+                {error}
+              </div>
+            </div>
           )}
-        </form>
-      </section>
+
+          <form className="coach-composer" onSubmit={submit}>
+            <div className="coach-composer-inner">
+              <button className="composer-icon-button" type="button" onClick={startNewChat} disabled={busy} aria-label="new chat">
+                <Plus size={18} aria-hidden="true" />
+              </button>
+              <textarea
+                className="coach-input"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendPrompt(input);
+                  }
+                }}
+                placeholder="ask coach"
+                disabled={busy}
+                rows={1}
+              />
+              {busy ? (
+                <button className="composer-send-button composer-stop-button" type="button" onClick={stopThinking} aria-label="stop thinking">
+                  <Square size={16} aria-hidden="true" />
+                </button>
+              ) : (
+                <button className="composer-send-button" type="submit" disabled={!input.trim()} aria-label="send message">
+                  <Send size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <p className="coach-hint">coach can make mistakes. check important info.</p>
+          </form>
+        </section>
+      </div>
     </section>
   );
 }
 
 function CoachMessageBubble({
   message,
+  userInitials,
   thinkingOpen,
   onToggleThinking,
 }: {
   message: CoachMessage;
+  userInitials: string;
   thinkingOpen: boolean;
   onToggleThinking: () => void;
 }) {
   const isAssistant = message.role === "assistant";
   const canShowThinking = isAssistant && (message.pending || Boolean(message.thinking));
-  const thinkingLabel = message.stopped ? "stopped thinking" : message.pending ? "thinking" : "thinking";
+  const thinkingLabel = message.stopped ? "stopped thinking" : message.pending ? "thinking" : "view reasoning";
 
   return (
-    <article className={`coach-message coach-message-${message.role}`}>
+    <article className={`coach-message ${isAssistant ? "coach-message-assistant" : "coach-message-user"}`}>
+      {isAssistant ? (
+        <div className="coach-message-avatar coach-message-avatar-assistant">
+          <Brain size={16} aria-hidden="true" />
+        </div>
+      ) : (
+        <div className="coach-message-avatar coach-message-avatar-user">
+          {userInitials}
+        </div>
+      )}
       <div className="coach-message-bubble">
-        <p className="text-xs font-semibold uppercase text-slate-500">{isAssistant ? "coach" : "you"}</p>
-        <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white">
-          {message.content || (message.pending ? "streaming response..." : "")}
+        <div className="coach-bubble-content">
+          {message.content || (message.pending ? (
+            <div className="coach-typing-dots"><span /><span /><span /></div>
+          ) : "")}
         </div>
 
         {canShowThinking && (
-          <div className="mt-3">
+          <div className="mt-2">
             <button className={`thinking-slider ${message.pending ? "thinking-slider-active" : ""}`} type="button" onClick={onToggleThinking}>
-              <span className="thinking-slider-track">
-                <span>{thinkingLabel} · click to reveal reasoning</span>
-              </span>
+              {thinkingLabel}
             </button>
             <AnimatePresence>
               {thinkingOpen && (

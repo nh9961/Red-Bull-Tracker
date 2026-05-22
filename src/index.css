@@ -326,62 +326,84 @@ textarea:focus-visible {
     box-shadow: var(--elevation-1);
   }
 
-  .coach-gemini-shell {
-    @apply grid min-h-[760px] gap-4;
+  .coach-shell {
+    @apply flex flex-col;
+    height: calc(100vh - 200px);
+    min-height: 480px;
+  }
+
+  @media (min-width: 1024px) {
+    .coach-shell {
+      height: calc(100vh - 160px);
+    }
   }
 
   .coach-locked-shell {
-    @apply place-items-center;
-    grid-template-columns: 1fr !important;
+    @apply flex items-center justify-center;
   }
 
-  .coach-chat-sidebar {
-    @apply hidden min-h-[760px] flex-col border p-3 xl:flex;
-    background: color-mix(in srgb, var(--surface-container-lowest) 80%, transparent);
-    border-color: color-mix(in srgb, var(--outline-variant) 64%, transparent);
-    border-radius: 34px;
-    box-shadow: var(--elevation-1);
+  .coach-layout {
+    @apply relative flex flex-1 gap-4 overflow-hidden;
   }
 
-  .coach-sidebar-brand {
-    @apply flex items-center gap-3 px-2 py-2;
+  .coach-sidebar {
+    @apply hidden w-72 shrink-0 flex-col border p-3 xl:flex;
+    background: var(--surface-container);
+    border-color: var(--outline-variant);
+    border-radius: 28px;
   }
 
-  .coach-brand-orb {
-    @apply grid h-16 w-16 place-items-center rounded-full shadow-sm;
-    background: radial-gradient(circle at 30% 26%, #ffffff 0 12%, #d7ecff 13% 48%, #7fb6df 72%, #5d8fb3 100%);
-    color: #163247;
+  .coach-sidebar-header {
+    @apply flex items-center gap-3 px-1 py-2;
   }
 
-  .coach-brand-orb-small {
-    @apply h-10 w-10;
+  .coach-sidebar-icon {
+    @apply flex h-10 w-10 items-center justify-center rounded-xl;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+
+  .coach-sidebar-label {
+    min-width: 0;
+  }
+
+  .coach-sidebar-label p:first-child {
+    @apply truncate text-sm font-semibold;
+    color: var(--text);
+  }
+
+  .coach-sidebar-label p:last-child {
+    @apply truncate text-xs;
+    color: var(--muted);
   }
 
   .coach-new-chat {
-    @apply mt-4 inline-flex min-h-12 items-center gap-3 rounded-full px-4 text-sm font-semibold transition disabled:cursor-not-allowed;
+    @apply mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed;
     background: var(--surface-container-high);
+    border-color: var(--outline-variant);
     color: var(--text);
   }
 
   .coach-new-chat:hover:not(:disabled) {
     background: var(--primary-container);
+    color: var(--on-primary-container);
   }
 
   .coach-chat-list {
-    @apply mt-4 grid flex-1 content-start gap-1 overflow-y-auto;
+    @apply mt-3 grid flex-1 content-start gap-1 overflow-y-auto;
   }
 
   .coach-chat-row {
-    @apply grid grid-cols-[1fr_auto] items-center rounded-3xl transition;
+    @apply grid grid-cols-[1fr_auto] items-center rounded-2xl transition;
     color: var(--text);
   }
 
   .coach-chat-row > button:first-child {
-    @apply grid min-w-0 gap-1 px-4 py-3 text-left;
+    @apply grid min-w-0 gap-0.5 px-3 py-2.5 text-left;
   }
 
   .coach-chat-row > button:last-child {
-    @apply mr-2 grid h-8 w-8 place-items-center rounded-full opacity-0 transition;
+    @apply mr-1 grid h-7 w-7 place-items-center rounded-lg opacity-0 transition;
     color: var(--muted);
   }
 
@@ -401,95 +423,156 @@ textarea:focus-visible {
 
   .coach-chat-row-active,
   .coach-chat-row:hover {
-    background: var(--surface-container-high);
+    background: var(--primary-container);
+  }
+
+  .coach-chat-row-active {
+    color: var(--on-primary-container);
+  }
+
+  .coach-chat-row-active small {
+    color: var(--on-primary-container);
   }
 
   .coach-context-card {
-    @apply mt-4 rounded-[28px] border p-4;
-    background: color-mix(in srgb, var(--surface-container-low) 76%, white);
+    @apply mt-auto rounded-2xl border p-3;
+    background: var(--surface-container-high);
     border-color: var(--outline-variant);
   }
 
-  .coach-stage {
-    @apply relative flex min-h-[760px] flex-col overflow-hidden border;
-    background:
-      radial-gradient(circle at 50% 64%, rgba(192, 225, 250, 0.78) 0 18%, transparent 42%),
-      linear-gradient(180deg, rgba(255,255,255,0.94), rgba(248,251,255,0.96));
-    border-color: color-mix(in srgb, var(--outline-variant) 64%, transparent);
-    border-radius: 38px;
-    box-shadow: var(--elevation-1);
+  .coach-main {
+    @apply relative flex flex-1 flex-col overflow-hidden border;
+    background: var(--surface-container-lowest);
+    border-color: var(--outline-variant);
+    border-radius: 28px;
   }
 
-  .coach-stage-topbar {
-    @apply flex items-center justify-between px-5 py-4 text-xs font-semibold;
+  .coach-topbar {
+    @apply flex items-center justify-between border-b px-4 py-2;
+    border-color: var(--outline-variant);
+    background: var(--surface-container-low);
+  }
+
+  .coach-topbar-status {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium;
     color: var(--muted);
   }
 
-  .coach-stage-messages {
-    @apply flex-1 space-y-5 overflow-y-auto px-4 pb-36 pt-8 sm:px-8 lg:px-16;
+  .coach-topbar-status-dot {
+    @apply h-2 w-2 rounded-full;
+  }
+
+  .coach-topbar-status-dot-ready {
+    background: var(--chart-secondary);
+  }
+
+  .coach-topbar-status-dot-busy {
+    background: var(--chart-tertiary);
+    @apply animate-pulse;
+  }
+
+  .coach-messages {
+    @apply flex-1 overflow-y-auto;
+  }
+
+  .coach-messages-inner {
+    @apply mx-auto max-w-3xl space-y-4 px-4 pb-32 pt-6;
   }
 
   .coach-empty-state {
-    @apply mx-auto flex min-h-[520px] max-w-3xl flex-col items-center justify-center text-center;
+    @apply flex min-h-full flex-col items-center justify-center px-6 text-center;
+  }
+
+  .coach-empty-icon {
+    @apply mb-5 flex h-16 w-16 items-center justify-center rounded-2xl;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
   }
 
   .coach-empty-state h2 {
-    @apply mt-6 text-5xl font-normal tracking-tight sm:text-6xl;
+    @apply text-3xl font-semibold tracking-tight;
     color: var(--text);
   }
 
   .coach-empty-state p {
-    @apply mt-4 max-w-xl text-base leading-7;
+    @apply mt-2 max-w-md text-sm leading-6;
     color: var(--muted);
   }
 
   .coach-prompt-grid {
-    @apply mt-7 grid gap-2 sm:grid-cols-3;
+    @apply mt-6 grid gap-2 sm:grid-cols-1;
+    max-width: 480px;
   }
 
   .coach-message {
-    @apply flex;
+    @apply flex gap-3;
   }
 
   .coach-message-user {
-    @apply justify-end;
+    @apply flex-row-reverse;
   }
 
-  .coach-message-assistant {
-    @apply justify-start;
+  .coach-message-avatar {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold;
+  }
+
+  .coach-message-avatar-assistant {
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+
+  .coach-message-avatar-user {
+    background: var(--tertiary-container);
+    color: var(--on-tertiary-container);
   }
 
   .coach-message-bubble {
-    @apply max-w-[840px] rounded-[34px] border px-5 py-4 shadow-sm;
-    background: rgba(255, 255, 255, 0.82);
-    border-color: color-mix(in srgb, var(--outline-variant) 58%, transparent);
-    backdrop-filter: blur(18px);
+    @apply max-w-[85%] rounded-2xl px-4 py-3;
+  }
+
+  .coach-message-assistant .coach-message-bubble {
+    background: var(--surface-container-high);
+    color: var(--text);
+    border-bottom-left-radius: 6px;
   }
 
   .coach-message-user .coach-message-bubble {
-    background: #ececec;
-    border-color: transparent;
+    background: var(--primary);
+    color: var(--on-primary);
+    border-bottom-right-radius: 6px;
   }
 
-  .coach-message-user .coach-message-bubble,
-  .coach-message-user .coach-message-bubble * {
-    color: var(--text) !important;
-  }
-
-  .thinking-slider {
-    @apply w-full overflow-hidden rounded-full border px-3 py-2 text-sm font-medium;
-    background: rgba(255, 255, 255, 0.72);
-    border-color: transparent;
+  .coach-bubble-label {
+    @apply mb-1 text-xs font-semibold;
     color: var(--muted);
   }
 
+  .coach-bubble-content {
+    @apply whitespace-pre-wrap text-sm leading-relaxed;
+  }
+
+  .coach-message-user .coach-bubble-content {
+    color: var(--on-primary);
+  }
+
+  .thinking-slider {
+    @apply mt-2 w-full overflow-hidden rounded-xl border px-3 py-2 text-xs font-medium transition;
+    background: var(--surface-container);
+    border-color: var(--outline-variant);
+    color: var(--muted);
+  }
+
+  .thinking-slider:hover {
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+
   .thinking-slider-active {
-    border-color: color-mix(in srgb, var(--primary) 42%, var(--outline-variant));
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--outline-variant));
   }
 
   .thinking-slider-track {
     @apply block overflow-hidden whitespace-nowrap;
-    mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
   }
 
   .thinking-slider-track span {
@@ -499,47 +582,57 @@ textarea:focus-visible {
   }
 
   .thinking-trace {
-    @apply mt-2 max-h-56 overflow-auto rounded-3xl border p-4 text-xs leading-5 whitespace-pre-wrap;
-    background: rgba(255, 255, 255, 0.72);
-    border-color: color-mix(in srgb, var(--outline-variant) 58%, transparent);
+    @apply mt-2 max-h-56 overflow-auto rounded-xl border p-3 text-xs leading-5 whitespace-pre-wrap;
+    background: var(--surface-container);
+    border-color: var(--outline-variant);
     color: var(--muted);
   }
 
   .coach-composer {
-    @apply absolute inset-x-4 bottom-4 z-10 mx-auto flex max-w-4xl items-center gap-3 rounded-full border p-3 sm:bottom-7;
-    background: rgba(255, 255, 255, 0.94);
-    border-color: color-mix(in srgb, var(--outline-variant) 68%, transparent);
-    box-shadow: 0 18px 50px rgba(74, 102, 122, 0.18);
-    backdrop-filter: blur(18px);
+    @apply absolute inset-x-0 bottom-0 z-10;
+    background: linear-gradient(to top, var(--surface-container-lowest) 60%, transparent);
+    padding: 0 1rem 1rem;
+  }
+
+  .coach-composer-inner {
+    @apply mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border p-2;
+    background: var(--surface-container-high);
+    border-color: var(--outline-variant);
+    box-shadow: var(--elevation-2);
   }
 
   .coach-input {
-    @apply min-h-12 flex-1 rounded-full border-0 px-2 text-lg shadow-none transition;
+    @apply min-h-11 flex-1 resize-none rounded-xl border-0 px-3 py-2 text-sm;
     background: transparent;
     color: var(--text);
+    field-sizing: content;
+    max-height: 160px;
   }
 
   .coach-input:focus {
     box-shadow: none;
   }
 
+  .coach-input::placeholder {
+    color: var(--muted);
+  }
+
   .composer-icon-button,
   .composer-send-button {
-    @apply grid h-12 w-12 shrink-0 place-items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-45;
-    color: var(--text);
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .composer-icon-button:hover {
-    background: var(--surface-container-high);
+    background: var(--surface-container);
   }
 
   .composer-send-button {
-    background: #97cbf5;
-    color: #10283a;
+    background: var(--primary);
+    color: var(--on-primary);
   }
 
   .composer-send-button:hover:not(:disabled) {
-    filter: brightness(0.98);
+    filter: brightness(1.05);
   }
 
   .composer-stop-button {
@@ -548,15 +641,53 @@ textarea:focus-visible {
   }
 
   .coach-unlock-card {
-    @apply mt-8 flex w-full max-w-xl flex-col gap-3 rounded-full border p-3 sm:flex-row;
-    background: rgba(255, 255, 255, 0.94);
-    border-color: color-mix(in srgb, var(--outline-variant) 68%, transparent);
-    box-shadow: var(--elevation-2);
+    @apply mt-6 flex w-full max-w-md flex-col gap-3;
+  }
+
+  .coach-unlock-card .coach-input {
+    @apply rounded-xl border px-4 py-3;
+    background: var(--surface-container-lowest);
+    border-color: var(--outline-variant);
+  }
+
+  .coach-error {
+    @apply mx-auto max-w-3xl px-4 pb-2;
+  }
+
+  .coach-error-inner {
+    @apply rounded-xl border px-3 py-2 text-sm;
+    border-color: var(--error-container);
+    background: var(--error-container);
+    color: var(--on-error-container);
+  }
+
+  .coach-typing-dots {
+    @apply flex items-center gap-1 py-1;
+  }
+
+  .coach-typing-dots span {
+    @apply inline-block h-2 w-2 rounded-full;
+    background: var(--muted);
+    animation: coach-bounce 1.4s infinite ease-in-out both;
+  }
+
+  .coach-typing-dots span:nth-child(1) { animation-delay: 0s; }
+  .coach-typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+  .coach-typing-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+  @keyframes coach-bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  .coach-hint {
+    @apply mt-1.5 text-center text-xs;
+    color: var(--muted);
   }
 
   @media (min-width: 1280px) {
-    .coach-gemini-shell {
-      grid-template-columns: 340px minmax(0, 1fr);
+    .coach-shell {
+      /* sidebar visible */
     }
   }
 
