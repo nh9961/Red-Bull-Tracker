@@ -1,3 +1,5 @@
+import type { LimitCheckResult } from "../types";
+import { formatStopTimeLabel } from "./userLimits";
 import { groupByFlavour } from "./metrics";
 
 type GreetingInput = {
@@ -7,6 +9,8 @@ type GreetingInput = {
   currentStreak: number;
   todayCaffeineMg: number;
   allTimeCans: number;
+  dailyCanLimit?: number;
+  limitCheck?: LimitCheckResult;
 };
 
 type GreetingResult = {
@@ -42,6 +46,14 @@ export function buildDynamicGreeting(input: GreetingInput): GreetingResult {
         : `${input.name}, no Red Bulls logged yet this ${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"}.`;
   } else if (cans === 1) {
     headline = `${input.name}, one Red Bull in so far today.`;
+  } else if (input.dailyCanLimit != null) {
+    if (cans >= input.dailyCanLimit) {
+      headline = `${input.name}, you're at your ${input.dailyCanLimit}-can daily limit.`;
+    } else if (cans >= input.dailyCanLimit - 1) {
+      headline = `${input.name}, ${cans} Red Bulls today — one under your limit.`;
+    } else {
+      headline = `${input.name}, ${cans} Red Bulls today — steady pace.`;
+    }
   } else if (cans <= 3) {
     headline = `${input.name}, ${cans} Red Bulls today — steady pace.`;
   } else {
@@ -54,20 +66,36 @@ export function buildDynamicGreeting(input: GreetingInput): GreetingResult {
       : `All-time favourite: ${favourite} (${input.allTimeCans} cans logged).`
     : "Your flavour story is just getting started.";
 
+  const stopLine =
+    input.limitCheck?.pastStopTime && input.limitCheck?.violations.includes("stopTime")
+      ? "You're past your stop time for today."
+      : null;
+
   const caffeineLine =
-    cans > 0 && input.todayCaffeineMg > 0
+    stopLine ??
+    (cans > 0 && input.todayCaffeineMg > 0
       ? `~${Math.round(input.todayCaffeineMg)}mg caffeine so far.`
       : hour >= 17 && cans === 0
         ? "Evening reset — clean slate if you want it."
         : hour >= 22
           ? "Late night — pace yourself if you're still going."
-          : "Log an intake to unlock today's signals.";
+          : "Log an intake to unlock today's signals.");
+
+  const limitLine =
+    input.dailyCanLimit != null && cans > 0
+      ? `${cans}/${input.dailyCanLimit} cans toward your daily limit.`
+      : null;
 
   return {
     badge,
     headline,
-    subline: [flavourLine, caffeineLine].join(" "),
+    subline: [flavourLine, limitLine ?? caffeineLine].filter(Boolean).join(" "),
   };
+}
+
+export function stopTimeGreetingHint(stopTime?: string, pastStopTime?: boolean) {
+  if (!stopTime || !pastStopTime) return null;
+  return `Past your ${formatStopTimeLabel(stopTime)} stop time.`;
 }
 
 export function buildFlavourHistorySummary(entries: Parameters<typeof groupByFlavour>[0]) {

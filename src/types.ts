@@ -74,3 +74,20 @@ export type CoachChat = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type UserLimits = {
+  dailyCanLimit?: number;
+  dailySpendLimit?: number;
+  stopTime?: string;
+};
+
+export type LimitViolation = "cans" | "spend" | "stopTime";
+
+export type LimitCheckResult = {
+  violations: LimitViolation[];
+  projectedCans: number;
+  projectedSpend: number;
+  todayCans: number;
+  todaySpend: number;
+  pastStopTime: boolean;
+};

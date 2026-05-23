@@ -18,7 +18,8 @@ import {
   sugarFor,
   wholeNumber,
 } from "./metrics";
-import type { CoachChat, CoachMessage, RedBullEntry } from "../types";
+import type { CoachChat, CoachMessage, LimitCheckResult, RedBullEntry, UserLimits } from "../types";
+import { limitsSummaryForCoach } from "./userLimits";
 
 type AuthUser = Models.User<Models.Preferences>;
 
@@ -38,7 +39,13 @@ type OllamaStreamChunk = { error?: string; message?: { content?: string; thinkin
 
 export type CoachSession = ReturnType<typeof useCoachSession>;
 
-export function useCoachSession(user: AuthUser, dashboard: Dashboard, entries: RedBullEntry[]) {
+export function useCoachSession(
+  user: AuthUser,
+  dashboard: Dashboard,
+  entries: RedBullEntry[],
+  userLimits: UserLimits = {},
+  limitCheck?: LimitCheckResult,
+) {
   const [chats, setChats] = useState<CoachChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [savedChatIds, setSavedChatIds] = useState<Set<string>>(() => new Set());
@@ -165,7 +172,7 @@ export function useCoachSession(user: AuthUser, dashboard: Dashboard, entries: R
 
       try {
         const requestMessages: Array<{ role: string; content: string; thinking?: string }> = [
-          { role: "system", content: buildCoachSystemPrompt(user, dashboard, entries) },
+          { role: "system", content: buildCoachSystemPrompt(user, dashboard, entries, userLimits, limitCheck) },
           ...conversation
             .filter((message) => message.content.trim().length > 0)
             .map((message) => ({
@@ -333,7 +340,13 @@ function titleForChat(currentTitle: string, prompt: string) {
   return cleaned.length > 48 ? `${cleaned.slice(0, 45)}...` : cleaned || "today";
 }
 
-function buildCoachSystemPrompt(user: AuthUser, dashboard: Dashboard, entries: RedBullEntry[]) {
+function buildCoachSystemPrompt(
+  user: AuthUser,
+  dashboard: Dashboard,
+  entries: RedBullEntry[],
+  userLimits: UserLimits,
+  limitCheck?: LimitCheckResult,
+) {
   const recent = entries
     .slice(0, 12)
     .map(
@@ -351,6 +364,7 @@ function buildCoachSystemPrompt(user: AuthUser, dashboard: Dashboard, entries: R
     `User: ${user.name || user.email || "Appwrite user"}`,
     `Current time (BST): ${getBstHour()}:00.`,
     `Today: ${dashboard.todayCans} cans, ${dashboard.todayCaffeine} caffeine, ${dashboard.todaySugar} sugar.`,
+    `Personal limits: ${limitsSummaryForCoach(userLimits, limitCheck ?? { violations: [], projectedCans: 0, projectedSpend: 0, todayCans: 0, todaySpend: 0, pastStopTime: false })}`,
     `All-time favourite: ${dashboard.favouriteFlavour}. Streak: ${dashboard.currentStreak} day(s). Spend: ${dashboard.totalSpend}.`,
     `Flavour history:\n${buildFlavourHistorySummary(entries)}`,
     `Recent entries:\n${recent || "No entries logged yet."}`,

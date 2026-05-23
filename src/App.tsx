@@ -14,6 +14,7 @@ import {
   Gauge,
   Github,
   Home,
+  Info,
   LineChart,
   Loader2,
   LogIn,
@@ -84,7 +85,16 @@ import {
   updateEntry,
 } from "./lib/appwriteEntries";
 import { CoachPanel } from "./components/CoachPanel";
+import { DailyLimitsCard } from "./components/DailyLimitsCard";
+import { LimitsSettingsForm } from "./components/LimitsSettingsForm";
+import { OnboardingScreen } from "./components/OnboardingScreen";
 import { buildDynamicGreeting } from "./lib/greeting";
+import {
+  evaluateLimits,
+  limitStatusMessage,
+  mergePrefsWithLimits,
+  parseUserLimits,
+} from "./lib/userLimits";
 import type { CoachSession } from "./lib/useCoachSession";
 import { useCoachSession } from "./lib/useCoachSession";
 import { createExcelExport, downloadBlob, parseExcelImport } from "./lib/excel";
@@ -115,12 +125,28 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+import type {
+  DateFilter,
+  EntryDraft,
+  Filters,
+  Flavour,
+  ImportPreview,
+  LimitCheckResult,
+  RedBullEntry,
+  UserLimits,
+} from "./types";
 
 type AppView = "overview" | "logbook" | "trends" | "coach" | "settings";
 type AuthMode = "login" | "signup";
 type AuthUser = Models.User<Models.Preferences>;
 type SetupStatus = { state: "checking" | "ok" | "error"; message: string };
+
+type PendingLimitAction = {
+  kind: "save" | "quick";
+  draft: EntryDraft;
+  editingId?: string;
+  quickLabel?: string;
+};
 
 const DEFAULT_FILTERS: Filters = {
   flavour: "all",
@@ -175,6 +201,11 @@ function App() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [dataError, setDataError] = useState("");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [userLimits, setUserLimits] = useState<UserLimits>({});
+  const [limitConfirmOpen, setLimitConfirmOpen] = useState(false);
+  const [limitConfirmMessage, setLimitConfirmMessage] = useState("");
+  const [pendingLimitAction, setPendingLimitAction] = useState<PendingLimitAction | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const excelFileInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -220,7 +251,14 @@ function App() {
         const currentUser = await account.get();
         if (!mounted) return;
         setUser(currentUser);
+        setUserLimits(parseUserLimits(currentUser.prefs));
+        if (typeof currentUser.prefs.themeId === "string" && currentUser.prefs.themeId) {
+          setThemeId(currentUser.prefs.themeId);
+        }
         setNotice(`Signed in as ${currentUser.email || currentUser.name || "Appwrite user"}.`);
+        if (!currentUser.prefs.onboarded) {
+          setShowOnboarding(true);
+        }
       } catch {
         if (!mounted) return;
         setUser(null);
@@ -268,12 +306,19 @@ function App() {
     [entries, filters],
   );
   const dashboard = useMemo(() => buildDashboard(entries), [entries]);
+  const limitCheck = useMemo(() => evaluateLimits(userLimits, entries), [userLimits, entries]);
   const chartData = useMemo(() => groupByDay(filteredEntries), [filteredEntries]);
   const weekData = useMemo(() => groupByWeek(filteredEntries), [filteredEntries]);
   const flavourData = useMemo(() => groupByFlavour(filteredEntries), [filteredEntries]);
   const insights = useMemo(() => buildInsights(entries), [entries]);
   const recentEntries = useMemo(() => entries.slice(0, 5), [entries]);
-  const coachSession = useCoachSession(user ?? { $id: "", email: "", name: "" } as AuthUser, dashboard, entries);
+  const coachSession = useCoachSession(
+    user ?? ({ $id: "", email: "", name: "" } as AuthUser),
+    dashboard,
+    entries,
+    userLimits,
+    limitCheck,
+  );
 
   async function login(email: string, password: string) {
     setActionLoading("auth");
@@ -282,7 +327,14 @@ function App() {
       await account.createEmailPasswordSession({ email, password });
       const currentUser = await account.get();
       setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      if (typeof currentUser.prefs.themeId === "string" && currentUser.prefs.themeId) {
+        setThemeId(currentUser.prefs.themeId);
+      }
       setNotice(`Signed in as ${currentUser.email}.`);
+      if (!currentUser.prefs.onboarded) {
+        setShowOnboarding(true);
+      }
     } catch (error) {
       setAuthError(appwriteErrorMessage(error));
     } finally {
@@ -303,7 +355,9 @@ function App() {
       await account.createEmailPasswordSession({ email, password });
       const currentUser = await account.get();
       setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
       setNotice(`Welcome, ${currentUser.name || currentUser.email}.`);
+      setShowOnboarding(true);
     } catch (error) {
       setAuthError(appwriteErrorMessage(error));
     } finally {
@@ -328,6 +382,7 @@ function App() {
       await account.deleteSession({ sessionId: "current" });
       setUser(null);
       setEntries([]);
+      setUserLimits({});
       setNotice("Logged out.");
     } catch (error) {
       setDataError(appwriteErrorMessage(error));
@@ -341,25 +396,89 @@ function App() {
     setIsEntryModalOpen(true);
   }
 
-  async function saveEntry(draft: EntryDraft) {
+  async function saveUserLimits(next: UserLimits) {
     if (!user) return;
-    setActionLoading("save-entry");
+    setActionLoading("save-limits");
     setDataError("");
     try {
-      const saved = editingEntry
-        ? await updateEntry(user.$id, editingEntry.id, { ...draft, source: editingEntry.source })
-        : await createEntry(user.$id, { ...draft, source: "manual" });
+      const prefs = mergePrefsWithLimits(user.prefs, next);
+      await account.updatePrefs(prefs);
+      const currentUser = await account.get();
+      setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      setNotice("Daily limits saved to your account.");
+    } catch (error) {
+      setDataError(appwriteErrorMessage(error));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function saveOnboarding(limits: UserLimits, onboardingThemeId: string) {
+    if (!user) return;
+    setActionLoading("save-onboarding");
+    setDataError("");
+    try {
+      const limitsPrefs = mergePrefsWithLimits(user.prefs, limits);
+      const nextPrefs = {
+        ...limitsPrefs,
+        themeId: onboardingThemeId,
+        onboarded: true,
+      };
+      await account.updatePrefs(nextPrefs);
+      const currentUser = await account.get();
+      setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      setThemeId(onboardingThemeId);
+      setShowOnboarding(false);
+      setNotice("Onboarding limits and theme saved successfully.");
+    } catch (error) {
+      setDataError(appwriteErrorMessage(error));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function persistEntry(action: PendingLimitAction) {
+    if (!user) return;
+    const loadingKey = action.kind === "quick" ? `quick-${action.quickLabel ?? "add"}` : "save-entry";
+    setActionLoading(loadingKey);
+    setDataError("");
+    try {
+      const editing = action.editingId ? entries.find((entry) => entry.id === action.editingId) : null;
+      const saved = editing
+        ? await updateEntry(user.$id, editing.id, { ...action.draft, source: editing.source })
+        : await createEntry(user.$id, { ...action.draft, source: action.draft.source ?? "manual" });
       setEntries((current) =>
-        sortEntries(editingEntry ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current]),
+        sortEntries(editing ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current]),
       );
-      setNotice(editingEntry ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
+      setNotice(editing ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
       setEditingEntry(null);
       setIsEntryModalOpen(false);
     } catch (error) {
       setDataError(appwriteErrorMessage(error));
     } finally {
       setActionLoading(null);
+      setLimitConfirmOpen(false);
+      setPendingLimitAction(null);
+      setLimitConfirmMessage("");
     }
+  }
+
+  function requestEntrySave(draft: EntryDraft, editingId?: string) {
+    const check = evaluateLimits(userLimits, entries, { draft, excludeEntryId: editingId });
+    if (check.violations.length) {
+      setPendingLimitAction({ kind: "save", draft, editingId });
+      setLimitConfirmMessage(limitStatusMessage(check.violations, check, userLimits));
+      setLimitConfirmOpen(true);
+      return;
+    }
+    void persistEntry({ kind: "save", draft, editingId });
+  }
+
+  async function saveEntry(draft: EntryDraft) {
+    if (!user) return;
+    requestEntrySave(draft, editingEntry?.id);
   }
 
   async function quickAdd(item: (typeof QUICK_ADDS)[number]) {
@@ -378,17 +497,20 @@ function App() {
       source: "quick-add",
     };
 
-    setActionLoading(`quick-${item.label}`);
-    setDataError("");
-    try {
-      const saved = await createEntry(user.$id, draft);
-      setEntries((current) => sortEntries([saved, ...current]));
-      setNotice(`${item.label} saved to Appwrite.`);
-    } catch (error) {
-      setDataError(appwriteErrorMessage(error));
-    } finally {
-      setActionLoading(null);
+    const check = evaluateLimits(userLimits, entries, { draft });
+    if (check.violations.length) {
+      setPendingLimitAction({ kind: "quick", draft, quickLabel: item.label });
+      setLimitConfirmMessage(limitStatusMessage(check.violations, check, userLimits));
+      setLimitConfirmOpen(true);
+      return;
     }
+
+    void persistEntry({ kind: "quick", draft, quickLabel: item.label });
+  }
+
+  function confirmLimitOverride() {
+    if (!pendingLimitAction) return;
+    void persistEntry(pendingLimitAction);
   }
 
   async function deleteEntry(id: string) {
@@ -529,6 +651,15 @@ function App() {
       data-theme={themeId}
       style={shellStyle}
     >
+      {showOnboarding && user && (
+        <OnboardingScreen
+          userName={user.name || undefined}
+          activeThemeId={themeId}
+          onThemeChange={setThemeId}
+          onSave={saveOnboarding}
+          onClose={() => setShowOnboarding(false)}
+        />
+      )}
       <input
         ref={excelFileInputRef}
         className="hidden"
@@ -596,6 +727,8 @@ function App() {
                   chartData={chartData}
                   flavourData={flavourData}
                   user={user}
+                  userLimits={userLimits}
+                  limitCheck={limitCheck}
                   coachSession={coachSession}
                   onQuickAdd={(item) => void quickAdd(item)}
                   onAdd={openNewEntry}
@@ -604,6 +737,7 @@ function App() {
                     setActiveView("coach");
                   }}
                   onOpenLogbook={() => setActiveView("logbook")}
+                  onOpenSettings={() => setActiveView("settings")}
                 />
               )}
 
@@ -633,6 +767,8 @@ function App() {
                   filters={filters}
                   flavours={allFlavours}
                   onFilterChange={setFilters}
+                  userLimits={userLimits}
+                  onSaveLimits={(next) => void saveUserLimits(next)}
                 />
               )}
 
@@ -655,6 +791,8 @@ function App() {
                   setupStatus={setupStatus}
                   themeId={themeId}
                   user={user}
+                  userLimits={userLimits}
+                  limitCheck={limitCheck}
                   actionLoading={actionLoading}
                   onExportExcel={() => void exportExcel()}
                   onImportExcel={() => excelFileInputRef.current?.click()}
@@ -663,6 +801,8 @@ function App() {
                   onLogout={() => void logout()}
                   onReset={() => setIsResetOpen(true)}
                   onThemeChange={setThemeId}
+                  onSaveLimits={(next) => void saveUserLimits(next)}
+                  onRerunOnboarding={() => setShowOnboarding(true)}
                 />
               )}
             </motion.main>
@@ -675,6 +815,8 @@ function App() {
         flavours={allFlavours}
         open={isEntryModalOpen}
         saving={actionLoading === "save-entry"}
+        userLimits={userLimits}
+        entries={entries}
         onClose={() => {
           setIsEntryModalOpen(false);
           setEditingEntry(null);
@@ -697,6 +839,20 @@ function App() {
         confirmLabel="Delete all"
         onCancel={() => setIsResetOpen(false)}
         onConfirm={() => void resetAll()}
+      />
+
+      <ConfirmDialog
+        busy={Boolean(actionLoading && pendingLimitAction)}
+        open={limitConfirmOpen}
+        title="Over your limit?"
+        body={limitConfirmMessage || "This intake goes past one of your daily limits."}
+        confirmLabel="Log anyway"
+        onCancel={() => {
+          setLimitConfirmOpen(false);
+          setPendingLimitAction(null);
+          setLimitConfirmMessage("");
+        }}
+        onConfirm={confirmLimitOverride}
       />
     </div>
   );
@@ -1070,6 +1226,8 @@ function TopBar({
     month: "long",
   }).format(new Date());
 
+  const [showActions, setShowActions] = useState(false);
+
   return (
     <header className="top-app-bar">
       <div className="top-app-bar-main">
@@ -1090,13 +1248,24 @@ function TopBar({
       </div>
 
       <div className="top-action-row">
-        <div className="top-action-primary">
-          <button className="primary-button" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
+        <div className="top-action-primary w-full md:w-auto grid grid-cols-2 gap-2 md:flex md:items-center">
+          <button className="primary-button justify-center min-h-12 text-sm active:scale-95" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
             <Plus size={18} aria-hidden="true" />
             Add Intake
           </button>
+          
+          <button 
+            className={`secondary-button justify-center md:hidden min-h-12 text-sm active:scale-95 transition-all ${showActions ? "bg-white/10" : ""}`}
+            type="button" 
+            onClick={() => setShowActions(!showActions)}
+          >
+            <Database size={17} aria-hidden="true" />
+            Actions
+          </button>
         </div>
-        <div className="top-action-secondary">
+
+        {/* Desktop actions (shown on md and up) */}
+        <div className="top-action-secondary hidden md:flex md:items-center">
           <button className="secondary-button" type="button" onClick={onRefresh} disabled={dataLoading}>
             {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
             Sync
@@ -1110,6 +1279,47 @@ function TopBar({
             Import XLSX
           </button>
         </div>
+
+        {/* Mobile actions tray (collapsible dropdown style) */}
+        <AnimatePresence>
+          {showActions && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden w-full overflow-hidden p-3 rounded-2xl bg-white/[0.02] border border-white/5 grid grid-cols-1 gap-2 shadow-lg"
+            >
+              <button 
+                className="secondary-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
+                type="button" 
+                onClick={() => { onRefresh(); setShowActions(false); }} 
+                disabled={dataLoading}
+              >
+                {dataLoading ? <Loader2 className="animate-spin" size={15} aria-hidden="true" /> : <RefreshCcw size={15} aria-hidden="true" />}
+                Sync with Cloud
+              </button>
+              <button 
+                className="excel-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
+                type="button" 
+                onClick={() => { onExportExcel(); setShowActions(false); }} 
+                disabled={!entries.length || Boolean(actionLoading)}
+              >
+                <FileSpreadsheet size={15} aria-hidden="true" />
+                Export XLSX Spreadsheet
+              </button>
+              <button 
+                className="excel-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
+                type="button" 
+                onClick={() => { onImportExcel(); setShowActions(false); }} 
+                disabled={Boolean(actionLoading)}
+              >
+                <Upload size={15} aria-hidden="true" />
+                Import XLSX Spreadsheet
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   );
@@ -1159,10 +1369,13 @@ function OverviewView({
   flavourData,
   user,
   coachSession,
+  userLimits,
+  limitCheck,
   onQuickAdd,
   onAdd,
   onOpenCoach,
   onOpenLogbook,
+  onOpenSettings,
 }: {
   dashboard: Dashboard;
   entries: RedBullEntry[];
@@ -1172,15 +1385,26 @@ function OverviewView({
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   flavourData: Array<{ name: string; value: number; spend: number; accent: string }>;
   user: AuthUser;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   coachSession: CoachSession;
   onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void;
   onAdd: () => void;
   onOpenCoach: (prompt?: string) => void;
   onOpenLogbook: () => void;
+  onOpenSettings: () => void;
 }) {
+  const todaySpendRaw = limitCheck.todaySpend;
+  const spendLimitDetail =
+    userLimits.dailySpendLimit != null
+      ? `${currency.format(todaySpendRaw)} of ${currency.format(userLimits.dailySpendLimit)} today`
+      : `${dashboard.monthSpend} this month`;
+
   return (
     <div className="grid gap-4">
-      <GreetingPanel dashboard={dashboard} user={user} onOpenCoach={onOpenCoach} />
+      <GreetingPanel dashboard={dashboard} user={user} userLimits={userLimits} limitCheck={limitCheck} onOpenCoach={onOpenCoach} />
+
+      <DailyLimitsCard limits={userLimits} check={limitCheck} onOpenSettings={onOpenSettings} />
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <CoachPanel
@@ -1193,24 +1417,31 @@ function OverviewView({
         <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <TodayPanel dashboard={dashboard} entries={entries} onAdd={onAdd} />
-        <AppCard title="Coach signals" subtitle="Live from your log">
-          <div className="grid gap-2">
-            <WellnessPill label="Today" value={`${dashboard.todayCans} cans`} />
-            <WellnessPill label="Caffeine" value={dashboard.todayCaffeine} />
-            <WellnessPill label="Favourite" value={dashboard.favouriteFlavour} />
-            <button className="list-button" type="button" onClick={() => onOpenCoach()}>
-              Open full coach
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
+      <TodayPanel dashboard={dashboard} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} />
+
+      {limitCheck.violations.length ? (
+        <section className="glass-panel border border-amber-200/20 bg-amber-200/10 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0 text-amber-200" size={20} aria-hidden="true" />
+            <div>
+              <p className="font-semibold text-white">Limit alerts</p>
+              <p className="mt-1 text-sm leading-6 text-slate-300">
+                {limitStatusMessage(limitCheck.violations, limitCheck, userLimits)}
+              </p>
+            </div>
           </div>
-        </AppCard>
-      </section>
+        </section>
+      ) : null}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricTile icon={CalendarDays} label="This Month" value={dashboard.monthCans} detail={`${dashboard.monthSpend} spent`} accent={MATERIAL_ACCENTS.primary} />
-        <MetricTile icon={PoundSterling} label="Total Spend" value={dashboard.totalSpend} detail={`${dashboard.avgWeeklySpend} weekly average`} accent={MATERIAL_ACCENTS.secondary} />
+        <MetricTile
+          icon={PoundSterling}
+          label={userLimits.dailySpendLimit != null ? "Today's budget" : "Total Spend"}
+          value={userLimits.dailySpendLimit != null ? currency.format(todaySpendRaw) : dashboard.totalSpend}
+          detail={spendLimitDetail}
+          accent={MATERIAL_ACCENTS.secondary}
+        />
         <MetricTile icon={Activity} label="Favourite" value={dashboard.favouriteFlavour} detail="by total cans" accent={MATERIAL_ACCENTS.tertiary} />
         <MetricTile icon={TimerReset} label="Days Without" value={dashboard.daysWithoutRedBull} detail={`${dashboard.currentStreak} day streak`} accent={MATERIAL_ACCENTS.error} />
       </section>
@@ -1288,14 +1519,24 @@ function OverviewView({
 function GreetingPanel({
   dashboard,
   user,
+  userLimits,
+  limitCheck,
   onOpenCoach,
 }: {
   dashboard: Dashboard;
   user: AuthUser;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   onOpenCoach: (prompt?: string) => void;
 }) {
   const todayNumber = Number.parseFloat(dashboard.todayCans) || 0;
-  const progress = Math.min(100, Math.round((todayNumber / 4) * 100));
+  const canLimit = userLimits.dailyCanLimit;
+  const progress = canLimit ? Math.min(100, Math.round((todayNumber / canLimit) * 100)) : 0;
+  const ringState = limitCheck.violations.includes("cans")
+    ? "over"
+    : canLimit && todayNumber >= canLimit * 0.75
+      ? "warn"
+      : "ok";
   const name = firstName(user);
   const greeting = buildDynamicGreeting({
     name,
@@ -1304,6 +1545,8 @@ function GreetingPanel({
     currentStreak: Number.parseInt(dashboard.currentStreak, 10) || 0,
     todayCaffeineMg: Number.parseFloat(dashboard.todayCaffeine.replace(/[^\d.]/g, "")) || 0,
     allTimeCans: Number.parseFloat(dashboard.allTimeCans) || 0,
+    dailyCanLimit: canLimit,
+    limitCheck,
   });
 
   const coachPrompts = [
@@ -1324,10 +1567,16 @@ function GreetingPanel({
   return (
     <section className="oura-hero glass-panel p-5 sm:p-6">
       <div className="grid gap-5 xl:grid-cols-[auto_1fr_auto] xl:items-center">
-        <div className="oura-ring" style={{ "--progress": `${progress}%` } as CSSProperties} aria-label={`${progress}% of daily guide`}>
+        <div
+          className={`oura-ring${ringState === "over" ? " oura-ring--over" : ringState === "warn" ? " oura-ring--warn" : ""}`}
+          style={{ "--progress": `${progress}%` } as CSSProperties}
+          aria-label={
+            canLimit ? `${progress}% of ${canLimit} can daily limit` : `${dashboard.todayCans} cans logged today`
+          }
+        >
           <div>
             <span>{dashboard.todayCans}</span>
-            <small>today</small>
+            <small>{canLimit ? `of ${canLimit}` : "today"}</small>
           </div>
         </div>
 
@@ -1370,12 +1619,25 @@ function WellnessPill({ label, value }: { label: string; value: string }) {
 function TodayPanel({
   dashboard,
   entries,
+  userLimits,
+  limitCheck,
   onAdd,
 }: {
   dashboard: Dashboard;
   entries: RedBullEntry[];
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   onAdd: () => void;
 }) {
+  const limitSummary = [
+    userLimits.dailyCanLimit != null ? `${limitCheck.todayCans.toFixed(1)}/${userLimits.dailyCanLimit} cans` : null,
+    userLimits.dailySpendLimit != null
+      ? `${currency.format(limitCheck.todaySpend)} of ${currency.format(userLimits.dailySpendLimit)} spend`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <section className="can-panel today-panel relative overflow-hidden p-5 sm:p-7">
       <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Today</p>
@@ -1383,6 +1645,7 @@ function TodayPanel({
         <div>
           <p className="text-7xl font-semibold tracking-tight text-white sm:text-8xl">{dashboard.todayCans}</p>
           <p className="mt-2 text-lg text-slate-300">cans logged</p>
+          {limitSummary ? <p className="mt-2 text-sm text-cyan-100/90">{limitSummary}</p> : null}
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
           <MiniMetric label="Caffeine" value={dashboard.todayCaffeine} accent={MATERIAL_ACCENTS.primary} />
@@ -1472,6 +1735,8 @@ function TrendsView({
   filters,
   flavours,
   onFilterChange,
+  userLimits,
+  onSaveLimits,
 }: {
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   weekData: Array<{ label: string; spend: number; cans: number }>;
@@ -1481,6 +1746,8 @@ function TrendsView({
   filters: Filters;
   flavours: Flavour[];
   onFilterChange: (filters: Filters) => void;
+  userLimits: UserLimits;
+  onSaveLimits: (limits: UserLimits) => void;
 }) {
   return (
     <div className="grid gap-4">
@@ -1573,7 +1840,213 @@ function TrendsView({
           ))}
         </div>
       </section>
+
+      <section className="grid gap-4">
+        <SpendingPredictionsCard
+          entries={entries}
+          userLimits={userLimits}
+          onSaveLimits={onSaveLimits}
+        />
+      </section>
     </div>
+  );
+}
+
+
+function SpendingPredictionsCard({
+  entries,
+  userLimits,
+  onSaveLimits,
+}: {
+  entries: RedBullEntry[];
+  userLimits: UserLimits;
+  onSaveLimits?: (limits: UserLimits) => void;
+}) {
+  const [projectionDays, setProjectionDays] = useState<7 | 30 | 90 | 365>(30);
+  const now = new Date();
+
+  // Establish typical daily averages over last 30 calendar days (or all time if tracked less than 30 days)
+  const firstEntryDate = useMemo(() => {
+    if (!entries.length) return now;
+    return new Date(
+      [...entries].sort(
+        (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+      )[0].dateTime
+    );
+  }, [entries]);
+
+  const trackingDays = useMemo(() => {
+    const diffTime = Math.abs(now.getTime() - firstEntryDate.getTime());
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }, [firstEntryDate]);
+
+  const activePeriodDays = Math.min(30, trackingDays);
+
+  const stats = useMemo(() => {
+    const cutoff = new Date(now.getTime() - activePeriodDays * 24 * 60 * 60 * 1000);
+    const recent = entries.filter((e) => new Date(e.dateTime) >= cutoff);
+    const totalSpend = recent.reduce((sum, e) => sum + e.cans * e.pricePerCan, 0);
+    const totalCans = recent.reduce((sum, e) => sum + e.cans, 0);
+
+    return {
+      avgDailySpend: totalSpend / activePeriodDays,
+      avgDailyCans: totalCans / activePeriodDays,
+      hasData: entries.length > 0,
+    };
+  }, [entries, activePeriodDays]);
+
+  const projectionData = useMemo(() => {
+    return Array.from({ length: projectionDays }).map((_, index) => {
+      const day = index + 1;
+      const dataPoint: any = {
+        label: `Day ${day}`,
+        "Current Path": Number((day * stats.avgDailySpend).toFixed(2)),
+        "Optimal Path (-20%)": Number((day * stats.avgDailySpend * 0.8).toFixed(2)),
+      };
+      if (userLimits.dailySpendLimit != null) {
+        dataPoint["Daily Limit Path"] = Number((day * userLimits.dailySpendLimit).toFixed(2));
+      }
+      return dataPoint;
+    });
+  }, [projectionDays, stats, userLimits.dailySpendLimit]);
+
+  if (!stats.hasData) {
+    return (
+      <AppCard title="Spending predictions" subtitle="Simulated forecast based on past spending">
+        <EmptyState title="Awaiting intake logs" copy="Predictions require historical logs. Add your first intake to unlock projections!" />
+      </AppCard>
+    );
+  }
+
+  const projectedSpend = stats.avgDailySpend * projectionDays;
+  const projectedCans = stats.avgDailyCans * projectionDays;
+  const optimalSpend = projectedSpend * 0.8;
+  const potentialSavings = projectedSpend - optimalSpend;
+
+  const handleApplyOptimalLimit = () => {
+    if (!onSaveLimits) return;
+    const optimalDailySpendLimit = Math.round(stats.avgDailySpend * 0.8 * 100) / 100;
+    onSaveLimits({
+      ...userLimits,
+      dailySpendLimit: optimalDailySpendLimit,
+    });
+  };
+
+  return (
+    <AppCard
+      title="Future spending predictions"
+      subtitle={`Based on last ${activePeriodDays} days: average daily spend of ${currency.format(stats.avgDailySpend)}`}
+    >
+      <div className="space-y-6">
+        {/* Toggle Range */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/5 pb-4">
+          <p className="text-sm text-slate-400">Select projection window:</p>
+          <div className="segmented-control max-w-xs self-start" role="tablist">
+            {([7, 30, 90, 365] as const).map((days) => (
+              <button
+                key={days}
+                type="button"
+                role="tab"
+                aria-selected={projectionDays === days}
+                onClick={() => setProjectionDays(days)}
+                className={projectionDays === days ? "segmented-control-active" : ""}
+              >
+                {days === 365 ? "1 Year" : `${days} Days`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Projections Stats Grid */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Projected spend</span>
+            <p className="text-2xl font-black text-white">{currency.format(projectedSpend)}</p>
+            <span className="text-[10px] text-slate-400 block font-medium">
+              ~{oneDecimal.format(projectedCans)} cans logged
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
+            <span className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-wider block">Optimal path (-20%)</span>
+            <p className="text-2xl font-black text-emerald-400">{currency.format(optimalSpend)}</p>
+            <span className="text-[10px] text-emerald-500 block font-medium">
+              ~{oneDecimal.format(projectedCans * 0.8)} cans logged
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-gradient-to-tr from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 space-y-1 flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-teal-300 uppercase tracking-wider block">Potential savings</span>
+              <p className="text-2xl font-black text-teal-300">{currency.format(potentialSavings)}</p>
+            </div>
+            {onSaveLimits && (
+              <button
+                type="button"
+                onClick={handleApplyOptimalLimit}
+                className="text-[10px] text-left font-bold text-emerald-400 hover:text-emerald-300 underline mt-1 block transition active:scale-[0.98]"
+              >
+                Lock daily limit to {currency.format(stats.avgDailySpend * 0.8)}/day
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Projections Recharts AreaChart */}
+        <div className="relative p-2 rounded-2xl bg-black/20 border border-white/5">
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={projectionData} margin={{ top: 12, right: 16, bottom: 0, left: -10 }}>
+              <defs>
+                <linearGradient id="currentProj" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="optimalProj" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+              <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} tickFormatter={(val) => `£${val}`} />
+              <Tooltip content={<ChartTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="Current Path"
+                stroke="var(--primary)"
+                fill="url(#currentProj)"
+                strokeWidth={3}
+              />
+              <Area
+                type="monotone"
+                dataKey="Optimal Path (-20%)"
+                stroke="#10b981"
+                fill="url(#optimalProj)"
+                strokeWidth={3}
+                strokeDasharray="4 4"
+              />
+              {userLimits.dailySpendLimit != null && (
+                <Line
+                  type="monotone"
+                  dataKey="Daily Limit Path"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  dot={false}
+                  strokeDasharray="6 6"
+                />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="text-xs text-slate-400 bg-white/[0.01] p-3 rounded-xl border border-white/5 flex items-start gap-2.5 leading-relaxed">
+          <Info size={16} className="text-cyan-400 shrink-0 mt-0.5" />
+          <span>
+            The <strong>Optimal Path</strong> models a sustainable 20% reduction target, which fits guidelines for a healthy energy drink moderation pace. If a budget is active, the <strong>Limit Path</strong> displays the projection if you exhaust your daily limit budget completely every day.
+          </span>
+        </div>
+      </div>
+    </AppCard>
   );
 }
 
@@ -1587,6 +2060,8 @@ function SettingsView({
   setupStatus,
   themeId,
   user,
+  userLimits,
+  limitCheck,
   actionLoading,
   onExportExcel,
   onImportExcel,
@@ -1595,6 +2070,8 @@ function SettingsView({
   onLogout,
   onReset,
   onThemeChange,
+  onSaveLimits,
+  onRerunOnboarding,
 }: {
   activeTheme: AppTheme;
   dashboard: Dashboard;
@@ -1603,7 +2080,9 @@ function SettingsView({
   notice: string;
   setupStatus: SetupStatus;
   themeId: string;
-  user: AuthUser;
+  user: AuthUser | null;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   actionLoading: string | null;
   onExportExcel: () => void;
   onImportExcel: () => void;
@@ -1612,14 +2091,35 @@ function SettingsView({
   onLogout: () => void;
   onReset: () => void;
   onThemeChange: (id: string) => void;
+  onSaveLimits: (limits: UserLimits) => void;
+  onRerunOnboarding: () => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
       <div className="grid gap-4">
+        <AppCard title="Daily limits" subtitle="Personal caps for cans, spend, and stop time (BST)">
+          <LimitsSettingsForm
+            limits={userLimits}
+            check={limitCheck}
+            saving={actionLoading === "save-limits"}
+            onSave={onSaveLimits}
+          />
+          <div className="mt-4 border-t border-white/5 pt-4 flex justify-end">
+            <button
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 text-xs font-bold text-slate-300 hover:bg-white/10 transition active:scale-95"
+              type="button"
+              onClick={onRerunOnboarding}
+            >
+              <Sparkles size={14} className="text-cyan-400" />
+              Re-run onboarding wizard
+            </button>
+          </div>
+        </AppCard>
+
         <AppCard title="Account" subtitle="Your Appwrite profile and sync status">
           <div className="rounded-lg border border-white/10 bg-white/[0.05] p-4">
-            <p className="text-lg font-semibold text-white">{user.name || "Appwrite user"}</p>
-            <p className="mt-1 text-sm text-slate-400">{user.email}</p>
+            <p className="text-lg font-semibold text-white">{user?.name || "Appwrite user"}</p>
+            <p className="mt-1 text-sm text-slate-400">{user?.email}</p>
             <div className="mt-4 flex items-center gap-2 text-sm text-slate-300">
               {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={16} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={16} aria-hidden="true" />}
               {notice}
@@ -2025,6 +2525,8 @@ function EntryModal({
   entry,
   flavours,
   saving,
+  userLimits,
+  entries,
   onClose,
   onSave,
 }: {
@@ -2032,6 +2534,8 @@ function EntryModal({
   entry: RedBullEntry | null;
   flavours: Flavour[];
   saving: boolean;
+  userLimits: UserLimits;
+  entries: RedBullEntry[];
   onClose: () => void;
   onSave: (draft: EntryDraft) => void;
 }) {
@@ -2086,8 +2590,8 @@ function EntryModal({
     sizePreset === "custom" && caffeineOverride.trim() ? Number(caffeineOverride) : undefined,
   );
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const draftPreview = useMemo((): EntryDraft | null => {
+    if (!open) return null;
     const numericCans = Math.max(0.25, Number(cans) || 1);
     const numericPrice = Math.max(0, Number(pricePerCan) || 0);
     const finalFlavour = isOther ? customFlavour.trim() || "Other" : selectedFlavour;
@@ -2096,8 +2600,7 @@ function EntryModal({
       sizePreset === "custom" && caffeineOverride.trim()
         ? Math.max(0, Number(caffeineOverride) || 0)
         : undefined;
-
-    onSave({
+    return {
       cans: numericCans,
       flavour: finalFlavour,
       flavourAccent: isOther ? customAccent || accentForCustomFlavour(finalFlavour) : meta.accent,
@@ -2109,7 +2612,34 @@ function EntryModal({
       sugarFree: sugarFree || Boolean(meta.sugarFree),
       caffeineMgPerCan: override,
       source: entry?.source ?? "manual",
-    });
+    };
+  }, [
+    open,
+    cans,
+    pricePerCan,
+    isOther,
+    customFlavour,
+    selectedFlavour,
+    customAccent,
+    numericSize,
+    dateTime,
+    notes,
+    store,
+    sugarFree,
+    sizePreset,
+    caffeineOverride,
+    entry?.source,
+  ]);
+
+  const draftLimitCheck = useMemo(() => {
+    if (!draftPreview) return null;
+    return evaluateLimits(userLimits, entries, { draft: draftPreview, excludeEntryId: entry?.id });
+  }, [draftPreview, entries, entry?.id, userLimits]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!draftPreview) return;
+    onSave(draftPreview);
   }
 
   return (
@@ -2143,6 +2673,13 @@ function EntryModal({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
+
+            {draftLimitCheck?.violations.length ? (
+              <p className="limit-banner mb-4" role="status">
+                {limitStatusMessage(draftLimitCheck.violations, draftLimitCheck, userLimits)} You can still save with
+                confirmation.
+              </p>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="field-label">
