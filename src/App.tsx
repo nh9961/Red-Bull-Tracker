@@ -3,11 +3,9 @@ import {
   Activity,
   AlertTriangle,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   Cloud,
   Command,
-  Database,
   Edit3,
   FileJson,
   FileSpreadsheet,
@@ -26,7 +24,6 @@ import {
   RotateCcw,
   Search,
   Settings2,
-  ShieldCheck,
   Sparkles,
   TimerReset,
   Trash2,
@@ -693,17 +690,9 @@ function App() {
           <MobileNav activeView={activeView} onChange={setActiveView} />
 
           <TopBar
-            activeTheme={activeTheme}
             activeView={activeView}
             actionLoading={actionLoading}
-            dataLoading={dataLoading}
-            entries={entries}
-            user={user}
             onAdd={openNewEntry}
-            onExportExcel={() => void exportExcel()}
-            onImportExcel={() => excelFileInputRef.current?.click()}
-            onOpenSettings={() => setActiveView("settings")}
-            onRefresh={() => void refreshEntries(user.$id)}
           />
 
           <StatusRail actionLoading={actionLoading} dataError={dataError} setupStatus={setupStatus} />
@@ -929,93 +918,83 @@ function AuthView({
   return (
     <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-theme={themeId} style={shellStyle}>
       <ShellBackdrop />
-      <main className="auth-layout">
-        <section className="auth-hero">
-          <div className="state-chip mb-4">
-            <Cloud size={16} aria-hidden="true" />
-            {setupStatus.state === "ok" ? "Appwrite sync online" : "Appwrite setup check"}
-          </div>
-          <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-white sm:text-6xl">
-            Red Bull Tracker App
-          </h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">
-            Soft Material You intake tracking with Appwrite authentication, device sync, and polished Excel exports.
-          </p>
-          <div className="auth-signal-grid">
-            <AuthSignal icon={ShieldCheck} label="User scoped" value="Private entries" />
-            <AuthSignal icon={Database} label="Database" value={appwriteConfig.databaseId} />
-            <AuthSignal icon={CheckCircle2} label="Ping" value={setupStatus.state === "ok" ? "Connected" : "Check setup"} />
-          </div>
-          {setupStatus.state !== "ok" && (
-            <div className="mt-4 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
-              {setupStatus.message}
-            </div>
-          )}
-        </section>
-
-        <section className="auth-panel">
-          <div className="segmented-control mb-5">
-            <button
-              className={mode === "login" ? "segmented-control-active" : ""}
-              type="button"
-              onClick={() => setMode("login")}
-            >
-              Log in
-            </button>
-            <button
-              className={mode === "signup" ? "segmented-control-active" : ""}
-              type="button"
-              onClick={() => setMode("signup")}
-            >
-              Sign up
-            </button>
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">Red Bull Tracker</h1>
+            <p className="mt-2 text-sm text-slate-400">Track intake, sync across devices.</p>
           </div>
 
-          <form className="grid gap-4" onSubmit={submit}>
-            {mode === "signup" && (
-              <label className="field-label">
-                Name
-                <input className="field-control" type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ned" />
-              </label>
-            )}
-            <label className="field-label">
-              Email
-              <input className="field-control" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
-            </label>
-            <label className="field-label">
-              Password
-              <input className="field-control" minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8+ characters" required />
-            </label>
-
-            {authError && (
-              <div className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-                {authError}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl">
+            {setupStatus.state !== "ok" && (
+              <div className="mb-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
+                {setupStatus.message}
               </div>
             )}
 
-            <button className="primary-button w-full" type="submit" disabled={busy}>
-              {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <LogIn size={17} aria-hidden="true" />}
-              {mode === "signup" ? "Create account" : "Log in"}
-            </button>
-          </form>
+            <div className="mb-5 grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1">
+              <button
+                className={`min-h-9 rounded-full text-sm font-medium transition ${mode === "login" ? "bg-white/[0.08] text-white" : "text-slate-400 hover:text-slate-200"}`}
+                type="button"
+                onClick={() => setMode("login")}
+              >
+                Log in
+              </button>
+              <button
+                className={`min-h-9 rounded-full text-sm font-medium transition ${mode === "signup" ? "bg-white/[0.08] text-white" : "text-slate-400 hover:text-slate-200"}`}
+                type="button"
+                onClick={() => setMode("signup")}
+              >
+                Sign up
+              </button>
+            </div>
 
-          <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs uppercase tracking-[0.22em] text-slate-500">
-            <span className="h-px bg-white/10" />
-            OAuth
-            <span className="h-px bg-white/10" />
-          </div>
+            <form className="grid gap-3" onSubmit={submit}>
+              {mode === "signup" && (
+                <label className="grid gap-1 text-sm text-slate-300">
+                  Name
+                  <input className="field-control" type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ned" />
+                </label>
+              )}
+              <label className="grid gap-1 text-sm text-slate-300">
+                Email
+                <input className="field-control" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
+              </label>
+              <label className="grid gap-1 text-sm text-slate-300">
+                Password
+                <input className="field-control" minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8+ characters" required />
+              </label>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("github")}>
-              <Github size={17} aria-hidden="true" />
-              GitHub
-            </button>
-            <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("google")}>
-              <User size={17} aria-hidden="true" />
-              Google
-            </button>
+              {authError && (
+                <div className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                  {authError}
+                </div>
+              )}
+
+              <button className="primary-button w-full mt-1" type="submit" disabled={busy}>
+                {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <LogIn size={17} aria-hidden="true" />}
+                {mode === "signup" ? "Create account" : "Log in"}
+              </button>
+            </form>
+
+            <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs uppercase tracking-[0.22em] text-slate-600">
+              <span className="h-px bg-white/10" />
+              or
+              <span className="h-px bg-white/10" />
+            </div>
+
+            <div className="grid gap-2">
+              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("github")}>
+                <Github size={17} aria-hidden="true" />
+                Continue with GitHub
+              </button>
+              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("google")}>
+                <User size={17} aria-hidden="true" />
+                Continue with Google
+              </button>
+            </div>
           </div>
-        </section>
+        </div>
       </main>
     </div>
   );
@@ -1193,29 +1172,13 @@ function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (v
 }
 
 function TopBar({
-  activeTheme,
   activeView,
   actionLoading,
-  dataLoading,
-  entries,
-  user,
   onAdd,
-  onExportExcel,
-  onImportExcel,
-  onOpenSettings,
-  onRefresh,
 }: {
-  activeTheme: AppTheme;
   activeView: AppView;
   actionLoading: string | null;
-  dataLoading: boolean;
-  entries: RedBullEntry[];
-  user: AuthUser;
   onAdd: () => void;
-  onExportExcel: () => void;
-  onImportExcel: () => void;
-  onOpenSettings: () => void;
-  onRefresh: () => void;
 }) {
   const activeItem = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
   const title = activeItem.label;
@@ -1225,8 +1188,6 @@ function TopBar({
     day: "numeric",
     month: "long",
   }).format(new Date());
-
-  const [showActions, setShowActions] = useState(false);
 
   return (
     <header className="top-app-bar">
@@ -1240,86 +1201,13 @@ function TopBar({
             <h1 className="top-title">{title}</h1>
           </div>
         </div>
-
-        <div className="top-meta-row">
-          <span className="account-chip">{user.email || "Synced user"}</span>
-          <CurrentThemeIndicator theme={activeTheme} onClick={onOpenSettings} />
-        </div>
       </div>
 
       <div className="top-action-row">
-        <div className="top-action-primary w-full md:w-auto grid grid-cols-2 gap-2 md:flex md:items-center">
-          <button className="primary-button justify-center min-h-12 text-sm active:scale-95" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
-            <Plus size={18} aria-hidden="true" />
-            Add Intake
-          </button>
-          
-          <button 
-            className={`secondary-button justify-center md:hidden min-h-12 text-sm active:scale-95 transition-all ${showActions ? "bg-white/10" : ""}`}
-            type="button" 
-            onClick={() => setShowActions(!showActions)}
-          >
-            <Database size={17} aria-hidden="true" />
-            Actions
-          </button>
-        </div>
-
-        {/* Desktop actions (shown on md and up) */}
-        <div className="top-action-secondary hidden md:flex md:items-center">
-          <button className="secondary-button" type="button" onClick={onRefresh} disabled={dataLoading}>
-            {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
-            Sync
-          </button>
-          <button className="excel-button" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
-            <FileSpreadsheet size={17} aria-hidden="true" />
-            Export XLSX
-          </button>
-          <button className="excel-button" type="button" onClick={onImportExcel} disabled={Boolean(actionLoading)}>
-            <Upload size={17} aria-hidden="true" />
-            Import XLSX
-          </button>
-        </div>
-
-        {/* Mobile actions tray (collapsible dropdown style) */}
-        <AnimatePresence>
-          {showActions && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10, height: 0 }}
-              animate={{ opacity: 1, y: 0, height: "auto" }}
-              exit={{ opacity: 0, y: -10, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="md:hidden w-full overflow-hidden p-3 rounded-2xl bg-white/[0.02] border border-white/5 grid grid-cols-1 gap-2 shadow-lg"
-            >
-              <button 
-                className="secondary-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
-                type="button" 
-                onClick={() => { onRefresh(); setShowActions(false); }} 
-                disabled={dataLoading}
-              >
-                {dataLoading ? <Loader2 className="animate-spin" size={15} aria-hidden="true" /> : <RefreshCcw size={15} aria-hidden="true" />}
-                Sync with Cloud
-              </button>
-              <button 
-                className="excel-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
-                type="button" 
-                onClick={() => { onExportExcel(); setShowActions(false); }} 
-                disabled={!entries.length || Boolean(actionLoading)}
-              >
-                <FileSpreadsheet size={15} aria-hidden="true" />
-                Export XLSX Spreadsheet
-              </button>
-              <button 
-                className="excel-button w-full justify-start min-h-11 px-4 text-xs font-semibold" 
-                type="button" 
-                onClick={() => { onImportExcel(); setShowActions(false); }} 
-                disabled={Boolean(actionLoading)}
-              >
-                <Upload size={15} aria-hidden="true" />
-                Import XLSX Spreadsheet
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <button className="primary-button justify-center min-h-12 text-sm active:scale-95" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
+          <Plus size={18} aria-hidden="true" />
+          Add Intake
+        </button>
       </div>
     </header>
   );
@@ -2144,6 +2032,10 @@ function SettingsView({
           </div>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button className="secondary-button justify-center" type="button" onClick={() => { typeof window !== 'undefined' && window.location.reload(); }} disabled={dataLoading}>
+              {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
+              Sync now
+            </button>
             <button className="excel-button justify-center" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
               <FileSpreadsheet size={17} aria-hidden="true" />
               Export XLSX
