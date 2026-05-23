@@ -2,7 +2,6 @@ import type { Models } from "appwrite";
 import {
   Activity,
   AlertTriangle,
-  Brain,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -17,21 +16,17 @@ import {
   Home,
   LineChart,
   Loader2,
-  Lock,
   LogIn,
   LogOut,
   MessageCircle,
-  MessageSquarePlus,
   Plus,
   PoundSterling,
   RefreshCcw,
   RotateCcw,
-  Send,
   Search,
   Settings2,
   ShieldCheck,
   Sparkles,
-  Square,
   TimerReset,
   Trash2,
   Upload,
@@ -88,13 +83,10 @@ import {
   listEntries,
   updateEntry,
 } from "./lib/appwriteEntries";
-import {
-  chatStorageErrorMessage,
-  createEncryptedChat,
-  deleteEncryptedChat,
-  listEncryptedChats,
-  updateEncryptedChat,
-} from "./lib/encryptedChats";
+import { CoachPanel } from "./components/CoachPanel";
+import { buildDynamicGreeting } from "./lib/greeting";
+import type { CoachSession } from "./lib/useCoachSession";
+import { useCoachSession } from "./lib/useCoachSession";
 import { createExcelExport, downloadBlob, parseExcelImport } from "./lib/excel";
 import {
   caffeineFor,
@@ -123,15 +115,12 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+import type { DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
 
 type AppView = "overview" | "logbook" | "trends" | "coach" | "settings";
 type AuthMode = "login" | "signup";
 type AuthUser = Models.User<Models.Preferences>;
 type SetupStatus = { state: "checking" | "ok" | "error"; message: string };
-type OllamaStreamChunk = { error?: string; message?: { content?: string; thinking?: string } };
-const OLLAMA_MODEL = "deepseek-v4-pro:cloud";
-const OLLAMA_PROXY_URL = import.meta.env.VITE_OLLAMA_PROXY_URL?.trim() || "/api/ollama-chat";
 
 const DEFAULT_FILTERS: Filters = {
   flavour: "all",
@@ -284,6 +273,7 @@ function App() {
   const flavourData = useMemo(() => groupByFlavour(filteredEntries), [filteredEntries]);
   const insights = useMemo(() => buildInsights(entries), [entries]);
   const recentEntries = useMemo(() => entries.slice(0, 5), [entries]);
+  const coachSession = useCoachSession(user ?? { $id: "", email: "", name: "" } as AuthUser, dashboard, entries);
 
   async function login(email: string, password: string) {
     setActionLoading("auth");
@@ -596,7 +586,7 @@ function App() {
               transition={{ duration: 0.2 }}
               className="app-main"
             >
-              {activeView === "overview" && (
+              {activeView === "overview" && user && (
                 <OverviewView
                   dashboard={dashboard}
                   entries={entries}
@@ -606,9 +596,13 @@ function App() {
                   chartData={chartData}
                   flavourData={flavourData}
                   user={user}
+                  coachSession={coachSession}
                   onQuickAdd={(item) => void quickAdd(item)}
                   onAdd={openNewEntry}
-                  onOpenCoach={() => setActiveView("coach")}
+                  onOpenCoach={(prompt) => {
+                    if (prompt) coachSession.queuePrompt(prompt);
+                    setActiveView("coach");
+                  }}
                   onOpenLogbook={() => setActiveView("logbook")}
                 />
               )}
@@ -642,7 +636,14 @@ function App() {
                 />
               )}
 
-              {activeView === "coach" && <CoachView dashboard={dashboard} entries={entries} user={user} />}
+              {activeView === "coach" && user && (
+                <CoachPanel
+                  mode="full"
+                  session={coachSession}
+                  dashboard={dashboard}
+                  userInitials={userInitials(user)}
+                />
+              )}
 
               {activeView === "settings" && (
                 <SettingsView
@@ -1157,6 +1158,7 @@ function OverviewView({
   chartData,
   flavourData,
   user,
+  coachSession,
   onQuickAdd,
   onAdd,
   onOpenCoach,
@@ -1170,18 +1172,40 @@ function OverviewView({
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   flavourData: Array<{ name: string; value: number; spend: number; accent: string }>;
   user: AuthUser;
+  coachSession: CoachSession;
   onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void;
   onAdd: () => void;
-  onOpenCoach: () => void;
+  onOpenCoach: (prompt?: string) => void;
   onOpenLogbook: () => void;
 }) {
   return (
     <div className="grid gap-4">
-      <GreetingPanel dashboard={dashboard} entries={entries} user={user} onOpenCoach={onOpenCoach} />
+      <GreetingPanel dashboard={dashboard} user={user} onOpenCoach={onOpenCoach} />
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <CoachPanel
+          mode="compact"
+          session={coachSession}
+          dashboard={dashboard}
+          userInitials={userInitials(user)}
+          onExpand={() => onOpenCoach()}
+        />
+        <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <TodayPanel dashboard={dashboard} entries={entries} onAdd={onAdd} />
-        <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
+        <AppCard title="Coach signals" subtitle="Live from your log">
+          <div className="grid gap-2">
+            <WellnessPill label="Today" value={`${dashboard.todayCans} cans`} />
+            <WellnessPill label="Caffeine" value={dashboard.todayCaffeine} />
+            <WellnessPill label="Favourite" value={dashboard.favouriteFlavour} />
+            <button className="list-button" type="button" onClick={() => onOpenCoach()}>
+              Open full coach
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </AppCard>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1263,20 +1287,39 @@ function OverviewView({
 
 function GreetingPanel({
   dashboard,
-  entries,
   user,
   onOpenCoach,
 }: {
   dashboard: Dashboard;
-  entries: RedBullEntry[];
   user: AuthUser;
-  onOpenCoach: () => void;
+  onOpenCoach: (prompt?: string) => void;
 }) {
   const todayNumber = Number.parseFloat(dashboard.todayCans) || 0;
   const progress = Math.min(100, Math.round((todayNumber / 4) * 100));
   const name = firstName(user);
-  const favourite = dashboard.favouriteFlavour === "None yet" ? "still forming" : dashboard.favouriteFlavour;
-  const redBullLabel = todayNumber === 1 ? "Red Bull" : "Red Bulls";
+  const greeting = buildDynamicGreeting({
+    name,
+    todayCans: todayNumber,
+    favouriteFlavour: dashboard.favouriteFlavour,
+    currentStreak: Number.parseInt(dashboard.currentStreak, 10) || 0,
+    todayCaffeineMg: Number.parseFloat(dashboard.todayCaffeine.replace(/[^\d.]/g, "")) || 0,
+    allTimeCans: Number.parseFloat(dashboard.allTimeCans) || 0,
+  });
+
+  const coachPrompts = [
+    {
+      label: "Pace today's caffeine",
+      prompt: "what does my red bull pattern say about today?",
+    },
+    {
+      label: "Sugar-free swap",
+      prompt: "give me one lower-sugar swap based on my favourite flavour.",
+    },
+    {
+      label: "Weekly spend trend",
+      prompt: "review my weekly spend trend and suggest one saving.",
+    },
+  ];
 
   return (
     <section className="oura-hero glass-panel p-5 sm:p-6">
@@ -1291,33 +1334,25 @@ function GreetingPanel({
         <div className="min-w-0">
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-400">
             <Sparkles size={14} aria-hidden="true" />
-            Daily readiness
+            {greeting.badge}
           </div>
-          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Hey {name}, you've had {dashboard.todayCans} {redBullLabel} today and your favourite flavour is {favourite}.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-            Clean caffeine, sugar, spend, and streak signals in one glance.
-          </p>
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{greeting.headline}</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">{greeting.subline}</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[390px] xl:grid-cols-1">
           <WellnessPill label="Caffeine" value={dashboard.todayCaffeine} />
           <WellnessPill label="Sugar" value={dashboard.todaySugar} />
-          <WellnessPill label="Entries" value={`${entries.length}`} />
+          <WellnessPill label="Streak" value={`${dashboard.currentStreak} days`} />
         </div>
       </div>
 
       <div className="mt-5 grid gap-2 md:grid-cols-3">
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Ask Coach for today's pace
-        </button>
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Get a sugar-free swap idea
-        </button>
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Review weekly spend trend
-        </button>
+        {coachPrompts.map((item) => (
+          <button key={item.label} className="suggestion-chip" type="button" onClick={() => onOpenCoach(item.prompt)}>
+            {item.label}
+          </button>
+        ))}
       </div>
     </section>
   );
@@ -1542,467 +1577,6 @@ function TrendsView({
   );
 }
 
-function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries: RedBullEntry[]; user: AuthUser }) {
-  const [chats, setChats] = useState<CoachChat[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [savedChatIds, setSavedChatIds] = useState<Set<string>>(() => new Set());
-  const [chatKey, setChatKey] = useState("");
-  const [chatKeyInput, setChatKeyInput] = useState("");
-  const [chatStorageStatus, setChatStorageStatus] = useState("unlock encrypted chat storage");
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [openThinkingIds, setOpenThinkingIds] = useState<string[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
-  const messages = useMemo(() => activeChat?.messages ?? [], [activeChat]);
-  const visibleMessages = useMemo(() => messages.filter((message) => message.id !== "coach-welcome"), [messages]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [activeChatId, messages]);
-
-  const quickPrompts = [
-    "what does my red bull pattern say about today?",
-    "give me one lower-sugar swap based on my favourite flavour.",
-    "how should i pace caffeine for the rest of the day?",
-  ];
-
-  async function unlockChats(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const passphrase = chatKeyInput.trim();
-    if (!passphrase) return;
-
-    setBusy(true);
-    setError("");
-    setChatStorageStatus("opening encrypted appwrite chats...");
-    try {
-      const savedChats = await listEncryptedChats(user.$id, passphrase);
-      const initialChats = savedChats.length ? savedChats : [buildNewCoachChat(user)];
-      setChatKey(passphrase);
-      setChats(initialChats);
-      setSavedChatIds(new Set(savedChats.map((chat) => chat.id)));
-      setActiveChatId(initialChats[0].id);
-      setChatStorageStatus(savedChats.length ? `${savedChats.length} encrypted chat${savedChats.length === 1 ? "" : "s"} loaded` : "new encrypted chat ready");
-    } catch (caught) {
-      const message = chatStorageErrorMessage(caught);
-      setError(message);
-      setChatKey("");
-      setChatStorageStatus("encrypted chat unlock failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function startNewChat() {
-    if (!chatKey) return;
-    const chat = buildNewCoachChat(user);
-    setChats((current) => [chat, ...current]);
-    setActiveChatId(chat.id);
-    setInput("");
-    setError("");
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await sendPrompt(input);
-  }
-
-  async function sendPrompt(prompt: string) {
-    const trimmed = prompt.trim();
-    if (!trimmed || busy) return;
-    if (!chatKey) {
-      setError("unlock encrypted chat storage first.");
-      return;
-    }
-
-    const currentChat = activeChat ?? buildNewCoachChat(user);
-    const userMessage: CoachMessage = { id: makeId(), role: "user", content: trimmed };
-    const assistantId = makeId();
-    const assistantMessage: CoachMessage = { id: assistantId, role: "assistant", content: "", thinking: "", pending: true };
-    const conversation = [...currentChat.messages, userMessage];
-    const now = new Date().toISOString();
-    const draftChat: CoachChat = {
-      ...currentChat,
-      title: titleForChat(currentChat.title, trimmed),
-      messages: [...conversation, assistantMessage],
-      updatedAt: now,
-    };
-
-    upsertChatState(draftChat);
-    setActiveChatId(draftChat.id);
-    setInput("");
-    setBusy(true);
-    setError("");
-
-    let streamedContent = "";
-    let streamedThinking = "";
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-
-    try {
-      const requestMessages: Array<{ role: string; content: string; thinking?: string }> = [
-        { role: "system", content: buildCoachSystemPrompt(user, dashboard, entries) },
-        ...conversation
-          .filter((message) => message.content.trim().length > 0)
-          .map((message) => ({
-            role: message.role,
-            content: message.content,
-            ...(message.thinking ? { thinking: message.thinking } : {}),
-          })),
-      ];
-
-      const response = await fetch(OLLAMA_PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          messages: requestMessages,
-          stream: true,
-          think: true,
-        }),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `Ollama request failed with status ${response.status}.`);
-      }
-      if (!response.body) {
-        throw new Error("Streaming response was empty.");
-      }
-
-      await readOllamaStream(response.body, (chunk) => {
-        if (chunk.error) throw new Error(chunk.error);
-        if (chunk.message?.thinking) streamedThinking += chunk.message.thinking;
-        if (chunk.message?.content) streamedContent += chunk.message.content.toLocaleLowerCase();
-
-        patchAssistantMessage(draftChat.id, assistantId, {
-          content: streamedContent,
-          thinking: streamedThinking,
-          pending: true,
-        });
-      });
-
-      const finalChat = withAssistantMessage(draftChat, assistantId, {
-        content: streamedContent || "no answer returned.",
-        thinking: streamedThinking,
-        pending: false,
-      });
-      upsertChatState(finalChat);
-      await persistChat(finalChat);
-    } catch (caught) {
-      const aborted = abortController.signal.aborted;
-      const message = caught instanceof Error ? caught.message : "Coach request failed.";
-      const finalChat = withAssistantMessage(draftChat, assistantId, {
-        content: aborted ? streamedContent || "stopped thinking." : `coach unavailable: ${message}`.toLocaleLowerCase(),
-        thinking: streamedThinking,
-        pending: false,
-        stopped: aborted,
-      });
-      upsertChatState(finalChat);
-      await persistChat(finalChat);
-      if (!aborted) setError(message);
-    } finally {
-      abortRef.current = null;
-      setBusy(false);
-    }
-  }
-
-  function stopThinking() {
-    abortRef.current?.abort();
-  }
-
-  function toggleThinking(id: string) {
-    setOpenThinkingIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
-  }
-
-  function upsertChatState(chat: CoachChat) {
-    setChats((current) => {
-      const exists = current.some((item) => item.id === chat.id);
-      return exists ? current.map((item) => (item.id === chat.id ? chat : item)) : [chat, ...current];
-    });
-  }
-
-  function patchAssistantMessage(chatId: string, messageId: string, patch: Partial<CoachMessage>) {
-    setChats((current) =>
-      current.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              updatedAt: new Date().toISOString(),
-              messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
-            }
-          : chat,
-      ),
-    );
-  }
-
-  function withAssistantMessage(chat: CoachChat, messageId: string, patch: Partial<CoachMessage>): CoachChat {
-    return {
-      ...chat,
-      updatedAt: new Date().toISOString(),
-      messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
-    };
-  }
-
-  async function persistChat(chat: CoachChat) {
-    if (!chatKey) return;
-    try {
-      const saved = savedChatIds.has(chat.id)
-        ? await updateEncryptedChat(user.$id, chatKey, chat)
-        : await createEncryptedChat(user.$id, chatKey, chat);
-      setSavedChatIds((current) => new Set(current).add(saved.id));
-      upsertChatState(saved);
-      setChatStorageStatus("encrypted chat saved to appwrite");
-    } catch (caught) {
-      setChatStorageStatus("encrypted chat save failed");
-      setError(chatStorageErrorMessage(caught));
-    }
-  }
-
-  async function removeChat(chatId: string) {
-    if (busy) return;
-    try {
-      if (savedChatIds.has(chatId)) await deleteEncryptedChat(chatId);
-      setSavedChatIds((current) => {
-        const next = new Set(current);
-        next.delete(chatId);
-        return next;
-      });
-      setChats((current) => {
-        const next = current.filter((chat) => chat.id !== chatId);
-        const fallback = buildNewCoachChat(user);
-        setActiveChatId(next[0]?.id ?? fallback.id);
-        return next.length ? next : [fallback];
-      });
-      setChatStorageStatus("encrypted chat deleted");
-    } catch (caught) {
-      setError(chatStorageErrorMessage(caught));
-    }
-  }
-
-  if (!chatKey) {
-    return (
-      <section className="coach-shell coach-locked-shell">
-        <div className="coach-empty-state">
-          <div className="coach-empty-icon">
-            <Lock size={28} aria-hidden="true" />
-          </div>
-          <h2>unlock coach</h2>
-          <p>
-            messages are encrypted before appwrite stores them. your passphrase is never saved — use the same one on every device.
-          </p>
-          <form className="coach-unlock-card" onSubmit={unlockChats}>
-            <input
-              className="coach-input"
-              type="password"
-              value={chatKeyInput}
-              onChange={(event) => setChatKeyInput(event.target.value)}
-              placeholder="encryption passphrase"
-              autoComplete="current-password"
-            />
-            <button className="primary-button" type="submit" disabled={busy || !chatKeyInput.trim()}>
-              {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <Lock size={17} aria-hidden="true" />}
-              unlock
-            </button>
-          </form>
-          {error && <p className="mt-4 max-w-md text-sm" style={{ color: "var(--error)" }}>{error}</p>}
-        </div>
-      </section>
-    );
-  }
-
-  const userInitials = user.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : (user.email?.[0] ?? "U").toUpperCase();
-
-  return (
-    <section className="coach-shell">
-      <div className="coach-layout">
-        <aside className="coach-sidebar">
-          <div className="coach-sidebar-header">
-            <div className="coach-sidebar-icon">
-              <Brain size={18} aria-hidden="true" />
-            </div>
-            <div className="coach-sidebar-label">
-              <p>coach</p>
-              <p>{chatStorageStatus}</p>
-            </div>
-          </div>
-
-          <button className="coach-new-chat" type="button" onClick={startNewChat} disabled={busy}>
-            <Plus size={16} aria-hidden="true" />
-            new chat
-          </button>
-
-          <div className="coach-chat-list">
-            {chats.map((chat) => (
-              <div key={chat.id} className={`coach-chat-row ${chat.id === activeChatId ? "coach-chat-row-active" : ""}`}>
-                <button type="button" onClick={() => setActiveChatId(chat.id)}>
-                  <span>{chat.title}</span>
-                  <small>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(chat.updatedAt))}</small>
-                </button>
-                <button type="button" aria-label={`delete ${chat.title}`} onClick={() => void removeChat(chat.id)} disabled={busy}>
-                  <Trash2 size={14} aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="coach-context-card">
-            <p className="text-xs font-semibold uppercase" style={{ color: "var(--muted)" }}>today</p>
-            <div className="mt-2 grid gap-2">
-              <WellnessPill label="cans" value={dashboard.todayCans} />
-              <WellnessPill label="caffeine" value={dashboard.todayCaffeine} />
-              <WellnessPill label="favourite" value={dashboard.favouriteFlavour} />
-            </div>
-          </div>
-        </aside>
-
-        <section className="coach-main">
-          <div className="coach-topbar">
-            <span className="coach-topbar-status">
-              <span className={`coach-topbar-status-dot ${busy ? "coach-topbar-status-dot-busy" : "coach-topbar-status-dot-ready"}`} />
-              {busy ? "thinking" : "ready"}
-            </span>
-            <span className="coach-topbar-status" style={{ color: "var(--muted)" }}>{OLLAMA_MODEL}</span>
-          </div>
-
-          <div className="coach-messages" aria-live="polite">
-            <div className="coach-messages-inner">
-              {!visibleMessages.length ? (
-                <div className="coach-empty-state">
-                  <div className="coach-empty-icon">
-                    <Sparkles size={28} aria-hidden="true" />
-                  </div>
-                  <h2>how can I help?</h2>
-                  <p>ask about caffeine, sugar, spending, or your flavour patterns.</p>
-                  <div className="coach-prompt-grid">
-                    {quickPrompts.map((prompt) => (
-                      <button key={prompt} className="chat-suggestion-chip" type="button" disabled={busy} onClick={() => void sendPrompt(prompt)}>
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                visibleMessages.map((message) => (
-                  <CoachMessageBubble
-                    key={message.id}
-                    message={message}
-                    userInitials={userInitials}
-                    thinkingOpen={openThinkingIds.includes(message.id)}
-                    onToggleThinking={() => toggleThinking(message.id)}
-                  />
-                ))
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          {error && (
-            <div className="coach-error">
-              <div className="coach-error-inner">
-                {error}
-              </div>
-            </div>
-          )}
-
-          <form className="coach-composer" onSubmit={submit}>
-            <div className="coach-composer-inner">
-              <button className="composer-icon-button" type="button" onClick={startNewChat} disabled={busy} aria-label="new chat">
-                <Plus size={18} aria-hidden="true" />
-              </button>
-              <textarea
-                className="coach-input"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendPrompt(input);
-                  }
-                }}
-                placeholder="ask coach"
-                disabled={busy}
-                rows={1}
-              />
-              {busy ? (
-                <button className="composer-send-button composer-stop-button" type="button" onClick={stopThinking} aria-label="stop thinking">
-                  <Square size={16} aria-hidden="true" />
-                </button>
-              ) : (
-                <button className="composer-send-button" type="submit" disabled={!input.trim()} aria-label="send message">
-                  <Send size={16} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            <p className="coach-hint">coach can make mistakes. check important info.</p>
-          </form>
-        </section>
-      </div>
-    </section>
-  );
-}
-
-function CoachMessageBubble({
-  message,
-  userInitials,
-  thinkingOpen,
-  onToggleThinking,
-}: {
-  message: CoachMessage;
-  userInitials: string;
-  thinkingOpen: boolean;
-  onToggleThinking: () => void;
-}) {
-  const isAssistant = message.role === "assistant";
-  const canShowThinking = isAssistant && (message.pending || Boolean(message.thinking));
-  const thinkingLabel = message.stopped ? "stopped thinking" : message.pending ? "thinking" : "view reasoning";
-
-  return (
-    <article className={`coach-message ${isAssistant ? "coach-message-assistant" : "coach-message-user"}`}>
-      {isAssistant ? (
-        <div className="coach-message-avatar coach-message-avatar-assistant">
-          <Brain size={16} aria-hidden="true" />
-        </div>
-      ) : (
-        <div className="coach-message-avatar coach-message-avatar-user">
-          {userInitials}
-        </div>
-      )}
-      <div className="coach-message-bubble">
-        <div className="coach-bubble-content">
-          {message.content || (message.pending ? (
-            <div className="coach-typing-dots"><span /><span /><span /></div>
-          ) : "")}
-        </div>
-
-        {canShowThinking && (
-          <div className="mt-2">
-            <button className={`thinking-slider ${message.pending ? "thinking-slider-active" : ""}`} type="button" onClick={onToggleThinking}>
-              {thinkingLabel}
-            </button>
-            <AnimatePresence>
-              {thinkingOpen && (
-                <motion.pre
-                  className="thinking-trace"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  {message.thinking || "waiting for reasoning trace..."}
-                </motion.pre>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
 
 function SettingsView({
   activeTheme,
@@ -2975,88 +2549,17 @@ function formatMetricValue(name: string, value: number) {
   return oneDecimal.format(value);
 }
 
-async function readOllamaStream(stream: ReadableStream<Uint8Array>, onChunk: (chunk: OllamaStreamChunk) => void) {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  function processLine(line: string) {
-    const chunk = parseOllamaLine(line);
-    if (chunk) onChunk(chunk);
-  }
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    lines.forEach(processLine);
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) processLine(buffer);
-}
-
-function parseOllamaLine(line: string): OllamaStreamChunk | null {
-  const trimmed = line.trim().replace(/^data:\s*/, "");
-  if (!trimmed || trimmed === "[DONE]") return null;
-  try {
-    return JSON.parse(trimmed) as OllamaStreamChunk;
-  } catch {
-    return null;
-  }
-}
-
-function buildCoachSystemPrompt(user: AuthUser, dashboard: Dashboard, entries: RedBullEntry[]) {
-  const recent = entries
-    .slice(0, 12)
-    .map(
-      (entry) =>
-        `- ${humanDateTime(entry.dateTime)}: ${entry.cans} can(s), ${entry.flavour}, ${entry.sizeMl}ml, ${currency.format(spendFor(entry))}, ${wholeNumber.format(caffeineFor(entry))}mg caffeine, ${oneDecimal.format(sugarFor(entry))}g sugar`,
-    )
-    .join("\n");
-
-  return [
-    "You are an upbeat Red Bull intake coach inside a tracking app.",
-    "Respond entirely in lower case, including headings and short labels.",
-    "Give concise, practical suggestions based only on the logged data provided.",
-    "Do not give medical advice; suggest checking labels and using personal judgement for caffeine tolerance.",
-    `User: ${user.name || user.email || "Appwrite user"}`,
-    `Today: ${dashboard.todayCans} cans, ${dashboard.todayCaffeine} caffeine, ${dashboard.todaySugar} sugar.`,
-    `Favourite flavour: ${dashboard.favouriteFlavour}. Current streak: ${dashboard.currentStreak} day(s). Total spend: ${dashboard.totalSpend}.`,
-    `Recent entries:\n${recent || "No entries logged yet."}`,
-  ].join("\n");
-}
-
-function buildNewCoachChat(user: AuthUser): CoachChat {
-  const now = new Date().toISOString();
-  return {
-    id: makeId(),
-    userId: user.$id,
-    title: "new chat",
-    createdAt: now,
-    updatedAt: now,
-    messages: [
-      {
-        id: "coach-welcome",
-        role: "assistant",
-        content: `hey ${firstName(user).toLocaleLowerCase()}, i can help with caffeine pace, sugar swaps, spend trends, and smarter quick-add choices.`,
-      },
-    ],
-  };
-}
-
-function titleForChat(currentTitle: string, prompt: string) {
-  if (currentTitle !== "new chat") return currentTitle;
-  const cleaned = prompt.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  return cleaned.length > 48 ? `${cleaned.slice(0, 45)}...` : cleaned || "new chat";
-}
-
 function firstName(user: AuthUser) {
   const fallback = user.email?.split("@")[0] ?? "there";
   const value = (user.name || fallback).trim();
   return value.split(/\s+/)[0] || "there";
+}
+
+function userInitials(user: AuthUser) {
+  if (user.name) {
+    return user.name.split(" ").map((part) => part[0]).join("").toUpperCase().slice(0, 2);
+  }
+  return (user.email?.[0] ?? "U").toUpperCase();
 }
 
 function sizeToPreset(size: number) {

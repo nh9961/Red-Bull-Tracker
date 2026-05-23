@@ -326,259 +326,240 @@ textarea:focus-visible {
     box-shadow: var(--elevation-1);
   }
 
-  .coach-shell {
-    @apply flex flex-col;
-    height: calc(100vh - 200px);
-    min-height: 480px;
+  .coach-panel {
+    @apply flex flex-col gap-3 p-5 sm:p-6;
   }
 
-  @media (min-width: 1024px) {
-    .coach-shell {
-      height: calc(100vh - 160px);
-    }
+  .coach-panel-compact {
+    min-height: 360px;
   }
 
-  .coach-locked-shell {
-    @apply flex items-center justify-center;
+  .coach-panel-full {
+    min-height: calc(100vh - 220px);
   }
 
-  .coach-layout {
-    @apply relative flex flex-1 gap-4 overflow-hidden;
+  .coach-panel-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between;
   }
 
-  .coach-sidebar {
-    @apply hidden w-72 shrink-0 flex-col border p-3 xl:flex;
-    background: var(--surface-container);
-    border-color: var(--outline-variant);
-    border-radius: 28px;
+  .coach-panel-title {
+    @apply flex items-start gap-3;
   }
 
-  .coach-sidebar-header {
-    @apply flex items-center gap-3 px-1 py-2;
-  }
-
-  .coach-sidebar-icon {
-    @apply flex h-10 w-10 items-center justify-center rounded-xl;
+  .coach-panel-icon {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl;
     background: var(--primary-container);
     color: var(--on-primary-container);
   }
 
-  .coach-sidebar-label {
-    min-width: 0;
+  .coach-panel-kicker {
+    @apply text-xs font-semibold uppercase tracking-wide;
+    color: var(--primary);
   }
 
-  .coach-sidebar-label p:first-child {
-    @apply truncate text-sm font-semibold;
+  .coach-panel-heading {
+    @apply text-lg font-semibold leading-snug;
     color: var(--text);
   }
 
-  .coach-sidebar-label p:last-child {
-    @apply truncate text-xs;
-    color: var(--muted);
+  .coach-panel-meta {
+    @apply flex flex-wrap items-center gap-2;
   }
 
-  .coach-new-chat {
-    @apply mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed;
+  .coach-status-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold;
     background: var(--surface-container-high);
     border-color: var(--outline-variant);
-    color: var(--text);
-  }
-
-  .coach-new-chat:hover:not(:disabled) {
-    background: var(--primary-container);
-    color: var(--on-primary-container);
-  }
-
-  .coach-chat-list {
-    @apply mt-3 grid flex-1 content-start gap-1 overflow-y-auto;
-  }
-
-  .coach-chat-row {
-    @apply grid grid-cols-[1fr_auto] items-center rounded-2xl transition;
-    color: var(--text);
-  }
-
-  .coach-chat-row > button:first-child {
-    @apply grid min-w-0 gap-0.5 px-3 py-2.5 text-left;
-  }
-
-  .coach-chat-row > button:last-child {
-    @apply mr-1 grid h-7 w-7 place-items-center rounded-lg opacity-0 transition;
     color: var(--muted);
   }
 
-  .coach-chat-row:hover > button:last-child,
-  .coach-chat-row-active > button:last-child {
-    opacity: 1;
-  }
-
-  .coach-chat-row span {
-    @apply truncate text-sm font-medium;
-  }
-
-  .coach-chat-row small {
-    @apply text-xs;
-    color: var(--muted);
-  }
-
-  .coach-chat-row-active,
-  .coach-chat-row:hover {
-    background: var(--primary-container);
-  }
-
-  .coach-chat-row-active {
-    color: var(--on-primary-container);
-  }
-
-  .coach-chat-row-active small {
-    color: var(--on-primary-container);
-  }
-
-  .coach-context-card {
-    @apply mt-auto rounded-2xl border p-3;
-    background: var(--surface-container-high);
-    border-color: var(--outline-variant);
-  }
-
-  .coach-main {
-    @apply relative flex flex-1 flex-col overflow-hidden border;
-    background: var(--surface-container-lowest);
-    border-color: var(--outline-variant);
-    border-radius: 28px;
-  }
-
-  .coach-topbar {
-    @apply flex items-center justify-between border-b px-4 py-2;
-    border-color: var(--outline-variant);
-    background: var(--surface-container-low);
-  }
-
-  .coach-topbar-status {
-    @apply inline-flex items-center gap-1.5 text-xs font-medium;
-    color: var(--muted);
-  }
-
-  .coach-topbar-status-dot {
+  .coach-status-dot {
     @apply h-2 w-2 rounded-full;
-  }
-
-  .coach-topbar-status-dot-ready {
     background: var(--chart-secondary);
   }
 
-  .coach-topbar-status-dot-busy {
+  .coach-status-dot-busy {
     background: var(--chart-tertiary);
     @apply animate-pulse;
   }
 
-  .coach-messages {
-    @apply flex-1 overflow-y-auto;
-  }
-
-  .coach-messages-inner {
-    @apply mx-auto max-w-3xl space-y-4 px-4 pb-32 pt-6;
-  }
-
-  .coach-empty-state {
-    @apply flex min-h-full flex-col items-center justify-center px-6 text-center;
-  }
-
-  .coach-empty-icon {
-    @apply mb-5 flex h-16 w-16 items-center justify-center rounded-2xl;
-    background: var(--primary-container);
-    color: var(--on-primary-container);
-  }
-
-  .coach-empty-state h2 {
-    @apply text-3xl font-semibold tracking-tight;
-    color: var(--text);
-  }
-
-  .coach-empty-state p {
-    @apply mt-2 max-w-md text-sm leading-6;
+  .coach-model-tag {
+    @apply text-xs;
     color: var(--muted);
   }
 
-  .coach-prompt-grid {
-    @apply mt-6 grid gap-2 sm:grid-cols-1;
-    max-width: 480px;
+  .coach-expand-button {
+    @apply inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold;
+    border-color: var(--outline-variant);
+    color: var(--text);
   }
 
-  .coach-message {
-    @apply flex gap-3;
+  .coach-thread-strip {
+    @apply flex flex-wrap items-center gap-2;
   }
 
-  .coach-message-user {
-    @apply flex-row-reverse;
+  .coach-thread-chip {
+    @apply inline-flex items-center overflow-hidden rounded-full border text-xs font-semibold;
+    border-color: var(--outline-variant);
+    background: var(--surface-container-high);
   }
 
-  .coach-message-avatar {
-    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold;
+  .coach-thread-chip button:first-child {
+    @apply px-3 py-1.5;
+    color: var(--text);
   }
 
-  .coach-message-avatar-assistant {
+  .coach-thread-chip button:last-child {
+    @apply px-2 py-1.5 opacity-60;
+    color: var(--muted);
+  }
+
+  .coach-thread-chip-active {
+    background: var(--primary-container);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--outline-variant));
+  }
+
+  .coach-thread-new {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-full border;
+    border-color: var(--outline-variant);
+    color: var(--text);
+  }
+
+  .coach-panel-context {
+    @apply flex flex-wrap gap-3 text-xs font-semibold;
+    color: var(--muted);
+  }
+
+  .coach-panel-feed {
+    @apply grid flex-1 content-start gap-3 overflow-y-auto rounded-2xl border p-3;
+    background: var(--surface-container-low);
+    border-color: var(--outline-variant);
+    min-height: 200px;
+    max-height: min(56vh, 640px);
+  }
+
+  .coach-panel-feed-compact {
+    min-height: 160px;
+    max-height: 280px;
+  }
+
+  .coach-panel-empty {
+    @apply flex flex-col items-center justify-center gap-3 px-4 py-8 text-center;
+    color: var(--muted);
+  }
+
+  .coach-panel-empty p {
+    @apply max-w-sm text-sm leading-6;
+  }
+
+  .coach-quick-grid {
+    @apply grid w-full gap-2;
+  }
+
+  .coach-line {
+    @apply grid grid-cols-[auto_1fr] gap-2;
+  }
+
+  .coach-line-avatar {
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold;
+    background: var(--surface-container-high);
+    color: var(--text);
+  }
+
+  .coach-line-assistant .coach-line-avatar {
     background: var(--primary-container);
     color: var(--on-primary-container);
   }
 
-  .coach-message-avatar-user {
+  .coach-line-user .coach-line-avatar {
     background: var(--tertiary-container);
     color: var(--on-tertiary-container);
   }
 
-  .coach-message-bubble {
-    @apply max-w-[85%] rounded-2xl px-4 py-3;
-  }
-
-  .coach-message-assistant .coach-message-bubble {
+  .coach-line-body {
+    @apply min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed;
     background: var(--surface-container-high);
     color: var(--text);
-    border-bottom-left-radius: 6px;
   }
 
-  .coach-message-user .coach-message-bubble {
+  .coach-line-user .coach-line-body {
     background: var(--primary);
     color: var(--on-primary);
-    border-bottom-right-radius: 6px;
   }
 
-  .coach-bubble-label {
-    @apply mb-1 text-xs font-semibold;
+  .coach-line-typing {
+    @apply inline-block animate-pulse;
     color: var(--muted);
   }
 
-  .coach-bubble-content {
-    @apply whitespace-pre-wrap text-sm leading-relaxed;
+  .coach-panel-error {
+    @apply rounded-xl border px-3 py-2 text-sm;
+    border-color: var(--error-container);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
-  .coach-message-user .coach-bubble-content {
-    color: var(--on-primary);
+  .coach-panel-composer {
+    @apply flex items-center gap-2;
   }
 
-  .thinking-slider {
-    @apply mt-2 w-full overflow-hidden rounded-xl border px-3 py-2 text-xs font-medium transition;
-    background: var(--surface-container);
-    border-color: var(--outline-variant);
+  .coach-panel-input {
+    @apply min-h-11 flex-1;
+  }
+
+  .coach-panel-send {
+    @apply min-h-11 min-w-11 px-0;
+  }
+
+  .thinking-pill {
+    @apply mb-2 overflow-hidden rounded-full border;
+    background: color-mix(in srgb, var(--surface-container) 88%, black 4%);
+    border-color: color-mix(in srgb, var(--outline-variant) 80%, var(--primary) 20%);
+  }
+
+  .thinking-pill-track {
+    @apply relative flex min-h-10 items-center justify-center overflow-hidden px-4;
+  }
+
+  .thinking-pill-label {
+    @apply relative z-[1] text-xs font-semibold tracking-wide;
     color: var(--muted);
   }
 
-  .thinking-slider:hover {
-    background: var(--primary-container);
-    color: var(--on-primary-container);
+  .thinking-pill-chevron {
+    @apply absolute right-3 z-[1] text-xs font-bold opacity-70;
+    color: var(--primary);
+    animation: thinking-unlock-nudge 1.8s ease-in-out infinite;
   }
 
-  .thinking-slider-active {
-    border-color: color-mix(in srgb, var(--primary) 40%, var(--outline-variant));
+  .thinking-pill-shimmer {
+    @apply absolute inset-y-0 left-0 w-16 rounded-full opacity-70;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--primary-container) 70%, white),
+      transparent
+    );
+    animation: thinking-unlock-slide 1.8s ease-in-out infinite;
   }
 
-  .thinking-slider-track {
-    @apply block overflow-hidden whitespace-nowrap;
+  .thinking-pill-stopped .thinking-pill-shimmer,
+  .thinking-pill-stopped .thinking-pill-chevron {
+    animation: none;
+    opacity: 0.35;
   }
 
-  .thinking-slider-track span {
-    @apply inline-block;
-    padding-left: 100%;
-    animation: thinking-slide 3.2s linear infinite;
+  .thinking-details {
+    @apply mt-2;
+  }
+
+  .thinking-details summary {
+    @apply cursor-pointer text-xs font-medium;
+    color: var(--muted);
+  }
+
+  .thinking-details summary:hover {
+    color: var(--text);
   }
 
   .thinking-trace {
@@ -1120,8 +1101,23 @@ textarea:focus-visible {
   color: var(--text);
 }
 
-@keyframes thinking-slide {
-  to {
-    transform: translateX(-100%);
+@keyframes thinking-unlock-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(calc(100vw + 120%));
+  }
+}
+
+@keyframes thinking-unlock-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateX(-4px);
+    opacity: 1;
   }
 }

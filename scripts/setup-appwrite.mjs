@@ -44,16 +44,21 @@ await ensureTable({
   name: "Coach chats",
   columns: [
     { kind: "string", key: "userId", size: 64, required: true },
-    { kind: "string", key: "encryptedTitle", size: 4000, required: true, encrypt: true },
-    { kind: "longtext", key: "encryptedMessages", required: true, encrypt: true },
-    { kind: "string", key: "titleIv", size: 128, required: true },
-    { kind: "string", key: "messagesIv", size: 128, required: true },
-    { kind: "string", key: "salt", size: 128, required: true },
-    { kind: "integer", key: "version", required: true },
+    { kind: "string", key: "title", size: 512, required: true },
+    { kind: "longtext", key: "messages", required: true },
     { kind: "datetime", key: "updatedAt", required: true },
   ],
   indexes: [{ key: "user_chat_updated", type: "key", columns: ["userId", "updatedAt"], orders: ["ASC", "DESC"], lengths: [32] }],
 });
+await retireLegacyChatColumns(chatTableId, [
+  "encryptedTitle",
+  "encryptedMessages",
+  "titleIv",
+  "messagesIv",
+  "salt",
+  "version",
+]);
+await waitForColumns(chatTableId, ["userId", "title", "messages", "updatedAt"]);
 
 console.log("Appwrite database and tables ready.");
 
@@ -120,6 +125,19 @@ async function ensureColumn(tableId, column) {
 
   await request("POST", `/tablesdb/${databaseId}/tables/${tableId}/columns/${column.kind}`, body, [202, 201]);
   console.log(`Column ${tableId}.${column.key} created.`);
+}
+
+async function retireLegacyChatColumns(tableId, keys) {
+  for (const key of keys) {
+    const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [200, 404]);
+    if (existing.status === 404) {
+      console.log(`Legacy column ${tableId}.${key} already removed.`);
+      continue;
+    }
+
+    await request("DELETE", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [204, 404]);
+    console.log(`Legacy column ${tableId}.${key} removed.`);
+  }
 }
 
 async function ensureIndex(tableId, index) {
