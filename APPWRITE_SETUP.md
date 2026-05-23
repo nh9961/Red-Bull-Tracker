@@ -180,19 +180,15 @@ Recommended table-level permissions:
 - Update: none
 - Delete: none
 
-The app encrypts chat titles and messages in the browser before writing rows. The encryption passphrase is not stored, and Appwrite only receives ciphertext.
+The app stores coach chat titles and messages as plain JSON in Appwrite with row-level user permissions.
 
 Create these chat columns:
 
 | Key | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `userId` | String, 64 | Yes | Current Appwrite user ID |
-| `encryptedTitle` | String, 4000 | Yes | AES-GCM ciphertext |
-| `encryptedMessages` | String, 50000+ | Yes | AES-GCM ciphertext for message JSON |
-| `titleIv` | String, 128 | Yes | Base64 IV |
-| `messagesIv` | String, 128 | Yes | Base64 IV |
-| `salt` | String, 128 | Yes | Base64 PBKDF2 salt |
-| `version` | Integer | Yes | Crypto version |
+| `title` | String, 512 | Yes | Chat title |
+| `messages` | Longtext | Yes | JSON array of coach messages |
 | `updatedAt` | DateTime | Yes | Sort key |
 
 Recommended chat index:
@@ -204,7 +200,7 @@ Recommended chat index:
 - `src/App.tsx`: UI shell, auth gate, dashboard/logbook/trends/coach/data views, modals, and action state.
 - `src/lib/appwrite.ts`: Appwrite SDK client, account/database services, env config, and ping helper.
 - `src/lib/appwriteEntries.ts`: User-scoped Appwrite CRUD, document permissions, duplicate signatures.
-- `src/lib/encryptedChats.ts`: Client-side encrypted chat storage for Appwrite.
+- `src/lib/coachChats.ts`: Appwrite-backed coach chat storage.
 - `src/lib/excel.ts`: Styled `.xlsx` export, summary sheet, row validation, duplicate-aware import preview.
 - `src/lib/metrics.ts`: Prices, caffeine/sugar estimates, stats, grouping, streaks.
 - `src/lib/storage.ts`: JSON backup export/import parser.
