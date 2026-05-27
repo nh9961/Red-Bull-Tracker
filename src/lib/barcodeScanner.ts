@@ -4,6 +4,7 @@ import {
   BrowserMultiFormatReader,
   type IScannerControls,
 } from "@zxing/browser";
+import { ensureBarcodeDetector, isAppleMobileDevice } from "./barcodeDetectorSupport";
 import { normalizeBarcode } from "./barcodeLookup";
 
 export type BarcodeScannerErrorCode =
@@ -54,7 +55,7 @@ const ZXING_FORMATS = [
   BarcodeFormat.UPC_A,
   BarcodeFormat.UPC_E,
 ];
-const SCAN_CONSTRAINTS: MediaStreamConstraints = {
+const PREFERRED_SCAN_CONSTRAINTS: MediaStreamConstraints = {
   video: {
     facingMode: { ideal: "environment" },
     width: { ideal: 1280 },
@@ -62,6 +63,7 @@ const SCAN_CONSTRAINTS: MediaStreamConstraints = {
   },
   audio: false,
 };
+const IOS_NATIVE_SCAN_INTERVAL_MS = 150;
 
 export async function startBarcodeScanner(
   videoElement: HTMLVideoElement,
@@ -71,6 +73,8 @@ export async function startBarcodeScanner(
   if (!navigator.mediaDevices?.getUserMedia) {
     throw toScannerError(new Error("Camera access is not supported in this browser."));
   }
+
+  await ensureBarcodeDetector();
 
   if (await supportsNativeBarcodeDetector()) {
     try {
@@ -121,15 +125,14 @@ function startNativeBarcodeScanner(
   return new Promise((resolve, reject) => {
     let stopped = false;
     let animationFrame = 0;
+    let scanInterval = 0;
     let stream: MediaStream | null = null;
 
     async function start() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia(SCAN_CONSTRAINTS);
-        videoElement.srcObject = stream;
-        videoElement.setAttribute("playsinline", "true");
-        videoElement.muted = true;
-        await videoElement.play();
+        stream = await getCameraStream();
+        prepareVideoElement(videoElement, stream);
+        await waitForVideoReady(videoElement);
 
         const Detector = (window as WindowWithBarcodeDetector).BarcodeDetector;
         if (!Detector) {
@@ -140,13 +143,14 @@ function startNativeBarcodeScanner(
         const stop = () => {
           stopped = true;
           window.cancelAnimationFrame(animationFrame);
+          window.clearInterval(scanInterval);
           stopVideoStream(videoElement);
         };
 
         const scan = async () => {
           if (stopped) return;
           try {
-            if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0) {
               const barcodes = await detector.detect(videoElement);
               const barcode = barcodes.find((item) => normalizeBarcode(item.rawValue ?? ""));
               if (barcode?.rawValue) {
@@ -156,12 +160,24 @@ function startNativeBarcodeScanner(
                 });
               }
             }
-          } finally {
-            if (!stopped) animationFrame = window.requestAnimationFrame(() => void scan());
+          } catch {
+            // Keep scanning; transient frame errors are common on mobile Safari.
           }
         };
 
-        animationFrame = window.requestAnimationFrame(() => void scan());
+        const scheduleScan = () => {
+          if (stopped) return;
+          void scan().finally(() => {
+            if (!stopped) animationFrame = window.requestAnimationFrame(scheduleScan);
+          });
+        };
+
+        if (isAppleMobileDevice()) {
+          scanInterval = window.setInterval(() => void scan(), IOS_NATIVE_SCAN_INTERVAL_MS);
+        } else {
+          animationFrame = window.requestAnimationFrame(scheduleScan);
+        }
+
         resolve({ mode: "native", stop });
       } catch (error) {
         if (stream) stream.getTracks().forEach((track) => track.stop());
@@ -178,26 +194,28 @@ async function startZxingBarcodeScanner(
   onResult: (result: BarcodeScanResult) => void,
   onError: (error: BarcodeScannerError) => void,
 ): Promise<BarcodeScannerController> {
-  const reader = new BrowserMultiFormatReader();
+  const reader = new BrowserMultiFormatReader(undefined, {
+    delayBetweenScanAttempts: isAppleMobileDevice() ? 150 : 500,
+  });
   reader.possibleFormats = ZXING_FORMATS;
 
   try {
-    const controls = await reader.decodeFromConstraints(
-      SCAN_CONSTRAINTS,
-      videoElement,
-      (result, error) => {
-        if (result) {
-          onResult({
-            value: normalizeBarcode(result.getText()),
-            format: BarcodeFormat[result.getBarcodeFormat()] ?? "unknown",
-          });
-          return;
-        }
-        if (error && !/not.?found/i.test(error.name) && !/not.?found/i.test(error.message)) {
-          onError(toScannerError(error));
-        }
-      },
-    );
+    const stream = await getCameraStream();
+    prepareVideoElement(videoElement, stream);
+    await waitForVideoReady(videoElement);
+
+    const controls = await reader.decodeFromStream(stream, videoElement, (result, error) => {
+      if (result) {
+        onResult({
+          value: normalizeBarcode(result.getText()),
+          format: BarcodeFormat[result.getBarcodeFormat()] ?? "unknown",
+        });
+        return;
+      }
+      if (error && !/not.?found/i.test(error.name) && !/not.?found/i.test(error.message)) {
+        onError(toScannerError(error));
+      }
+    });
 
     return {
       mode: "zxing",
@@ -226,6 +244,72 @@ async function supportsNativeBarcodeDetector() {
     return NATIVE_FORMATS.some((format) => formats.includes(format));
   } catch {
     return false;
+  }
+}
+
+async function getCameraStream() {
+  const attempts: MediaStreamConstraints[] = [
+    PREFERRED_SCAN_CONSTRAINTS,
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+    { video: { facingMode: "environment" }, audio: false },
+    { video: true, audio: false },
+  ];
+
+  let lastError: unknown;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      if (isCameraAccessError(error) && !(error instanceof DOMException && error.name === "OverconstrainedError")) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Could not access the camera.");
+}
+
+function prepareVideoElement(videoElement: HTMLVideoElement, stream: MediaStream) {
+  videoElement.srcObject = stream;
+  videoElement.setAttribute("playsinline", "true");
+  videoElement.setAttribute("webkit-playsinline", "true");
+  videoElement.setAttribute("autoplay", "true");
+  videoElement.muted = true;
+}
+
+async function waitForVideoReady(videoElement: HTMLVideoElement) {
+  if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0) {
+    await playVideoElement(videoElement);
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      void playVideoElement(videoElement).then(resolve).catch(reject);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Camera preview failed to start."));
+    };
+    const cleanup = () => {
+      videoElement.removeEventListener("loadedmetadata", onReady);
+      videoElement.removeEventListener("error", onError);
+    };
+
+    videoElement.addEventListener("loadedmetadata", onReady, { once: true });
+    videoElement.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function playVideoElement(videoElement: HTMLVideoElement) {
+  try {
+    await videoElement.play();
+  } catch (error) {
+    if (videoElement.paused) {
+      throw error;
+    }
   }
 }
 

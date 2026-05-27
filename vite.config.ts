@@ -13,6 +13,7 @@ export default defineConfig(({ command }) => ({
           charts: ["recharts"],
           motion: ["framer-motion"],
           icons: ["lucide-react"],
+          barcode: ["@undecaf/barcode-detector-polyfill"],
         },
       },
     },

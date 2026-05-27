@@ -12,6 +12,7 @@
     "setup:appwrite": "node scripts/setup-appwrite.mjs"
   },
   "dependencies": {
+    "@undecaf/barcode-detector-polyfill": "^0.9.23",
     "@vitejs/plugin-react": "^4.3.4",
     "@zxing/browser": "^0.2.0",
     "appwrite": "^25.0.0",
