@@ -5,7 +5,7 @@ const currentOrigin = window.location.origin;
 
 export const appwriteConfig = {
   endpoint: env.VITE_APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1",
-  projectId: env.VITE_APPWRITE_PROJECT_ID,
+  projectId: env.VITE_APPWRITE_PROJECT_ID!,
   databaseId: env.VITE_APPWRITE_DATABASE_ID || "redbull_tracker",
   collectionId: env.VITE_APPWRITE_COLLECTION_ID || "intake_entries",
   chatCollectionId: env.VITE_APPWRITE_CHAT_COLLECTION_ID || "coach_chats",
