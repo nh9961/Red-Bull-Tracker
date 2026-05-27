@@ -123,21 +123,7 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
-
-type CoachMessage = {
-  role: "user" | "assistant" | "system";
-  content: string;
-  thinking?: string;
-};
-
-type CoachChat = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messages: CoachMessage[];
-};
+import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
 
 type AppView = "overview" | "logbook" | "trends" | "settings";
 type AuthMode = "login" | "signup";
@@ -972,18 +958,7 @@ function AuthView({
             </form>
 
           </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("github")}>
-              <Github size={17} aria-hidden="true" />
-              GitHub
-            </button>
-            <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("google")}>
-              <User size={17} aria-hidden="true" />
-              Google
-            </button>
-          </div>
-        </section>
+        </div>
       </main>
     </div>
   );
@@ -1713,6 +1688,7 @@ function SpendForecastCard({
     return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
   }, [firstEntryDate, now]);
 
+  async function unlockChatStorage(passphrase: string) {
     setBusy(true);
     setError("");
     setChatStorageStatus("opening encrypted appwrite chats...");
@@ -1762,13 +1738,12 @@ function SpendForecastCard({
     const assistantMessage: CoachMessage = { id: assistantId, role: "assistant", content: "", thinking: "", pending: true };
     const conversation = [...currentChat.messages, userMessage];
     const now = new Date().toISOString();
-    const draftChat: CoachChat = {
-      ...currentChat,
-      title: titleForChat(currentChat.title, trimmed),
-      messages: [...conversation, assistantMessage],
-      updatedAt: now,
-    };
-  }, [entries, activePeriodDays, now]);
+    setChats((current) =>
+      current.map((c) => (c.id === currentChat.id ? draftChat : c))
+    );
+    setChatStorageStatus("");
+    setInput("");
+  }
 
   const projectionData = useMemo<ForecastPoint[]>(() => {
     return Array.from({ length: projectionDays }).map((_, index) => {
@@ -1781,6 +1756,9 @@ function SpendForecastCard({
       if (userLimits.dailySpendLimit != null) {
         dataPoint.limit = Number((day * userLimits.dailySpendLimit).toFixed(2));
       }
+      return dataPoint;
+    });
+  }, [projectionDays, stats.avgDailySpend, userLimits?.dailySpendLimit]);
 
   if (!stats.hasData) {
     return (
@@ -1862,7 +1840,6 @@ function SpendForecastCard({
             )}
           </div>
         </div>
-      </aside>
 
         <div className="forecast-chart-wrap relative">
           <ResponsiveContainer width="100%" height={260}>
@@ -1912,7 +1889,6 @@ function SpendForecastCard({
             </AreaChart>
           </ResponsiveContainer>
         </div>
-
       </div>
     </AppCard>
   );
@@ -2474,8 +2450,7 @@ function EntryModal({
     sizePreset === "custom" && caffeineOverride.trim() ? Number(caffeineOverride) : undefined,
   );
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const draftPreview = useMemo(() => {
     const numericCans = Math.max(0.25, Number(cans) || 1);
     const numericPrice = Math.max(0, Number(pricePerCan) || 0);
     const finalFlavour = isOther ? customFlavour.trim() || "Other" : selectedFlavour;
@@ -2485,7 +2460,7 @@ function EntryModal({
         ? Math.max(0, Number(caffeineOverride) || 0)
         : undefined;
 
-    onSave({
+    return {
       cans: numericCans,
       flavour: finalFlavour,
       flavourAccent: isOther ? customAccent || accentForCustomFlavour(finalFlavour) : meta.accent,
@@ -3065,4 +3040,5 @@ function actionLabel(value: string) {
     .replace(/-/g, " ");
 }
 
+}
 export default App;
