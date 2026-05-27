@@ -92,6 +92,7 @@ export function useCoachSession(
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.$id]);
 
   const upsertChatState = useCallback((chat: CoachChat) => {
@@ -240,7 +241,7 @@ export function useCoachSession(
         setBusy(false);
       }
     },
-    [activeChat, busy, dashboard, entries, patchAssistantMessage, persistChat, storageReady, upsertChatState, user, withAssistantMessage],
+    [activeChat, busy, dashboard, entries, limitCheck, patchAssistantMessage, persistChat, storageReady, upsertChatState, user, userLimits, withAssistantMessage],
   );
 
   const queuePrompt = useCallback((prompt: string) => {
