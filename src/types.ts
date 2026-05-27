@@ -122,3 +122,23 @@ export type LimitCheckResult = {
   todaySpend: number;
   pastStopTime: boolean;
 };
+
+export type ChatRole = "user" | "assistant";
+
+export type CoachMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  thinking?: string;
+  pending?: boolean;
+  stopped?: boolean;
+};
+
+export type CoachChat = {
+  id: string;
+  userId: string;
+  title: string;
+  messages: CoachMessage[];
+  createdAt: string;
+  updatedAt: string;
+};

@@ -2,13 +2,11 @@ import type { Models } from "appwrite";
 import {
   Activity,
   AlertTriangle,
-  Brain,
   CalendarDays,
   Camera,
   ChevronRight,
   Cloud,
   Command,
-  Database,
   Edit3,
   FileJson,
   FileSpreadsheet,
@@ -16,19 +14,15 @@ import {
   Home,
   LineChart,
   Loader2,
-  Lock,
   LogIn,
   LogOut,
   Plus,
   PoundSterling,
   RefreshCcw,
   RotateCcw,
-  Send,
   Search,
   Settings2,
-  ShieldCheck,
   Sparkles,
-  Square,
   TimerReset,
   Trash2,
   Upload,
@@ -86,6 +80,7 @@ import {
 } from "./lib/appwriteEntries";
 import { BarcodeScannerModal } from "./components/BarcodeScannerModal";
 import { DailyLimitsCard } from "./components/DailyLimitsCard";
+import { LegalFootnote } from "./components/LegalFootnote";
 import { LimitsSettingsForm } from "./components/LimitsSettingsForm";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { buildDynamicGreeting } from "./lib/greeting";
@@ -123,21 +118,41 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+import type {
+  DateFilter,
+  EntryDraft,
+  Filters,
+  Flavour,
+  ImportPreview,
+  LimitCheckResult,
+  RedBullEntry,
+  UserLimits,
+} from "./types";
 
 type AppView = "overview" | "logbook" | "trends" | "settings";
 type AuthMode = "login" | "signup";
 type AuthUser = Models.User<Models.Preferences>;
 type SetupStatus = { state: "checking" | "ok" | "error"; message: string };
-type OllamaStreamChunk = { error?: string; message?: { content?: string; thinking?: string } };
-const OLLAMA_MODEL = "deepseek-v4-pro:cloud";
-const OLLAMA_PROXY_URL = import.meta.env.VITE_OLLAMA_PROXY_URL?.trim() || "/api/ollama-chat";
-
 type ForecastPoint = {
   label: string;
   current: number;
   lower: number;
   limit?: number;
+};
+
+type PendingLimitAction = {
+  kind: "save" | "quick";
+  draft: EntryDraft;
+  editingId?: string;
+  quickLabel?: string;
+};
+
+const MATERIAL_ACCENTS = {
+  primary: "var(--chart-primary)",
+  secondary: "var(--chart-secondary)",
+  tertiary: "var(--chart-tertiary)",
+  error: "var(--chart-error)",
+  custom: "#b85d84",
 };
 
 const DEFAULT_FILTERS: Filters = {
@@ -379,7 +394,7 @@ function App() {
     setIsEntryModalOpen(true);
   }
 
-  async function saveEntry(draft: EntryDraft) {
+  async function saveUserLimits(next: UserLimits) {
     if (!user) return;
     setBusyAction("save-limits");
     setSyncError("");
@@ -433,9 +448,9 @@ function App() {
         ? await updateEntry(user.$id, editing.id, { ...action.draft, source: editing.source })
         : await createEntry(user.$id, { ...action.draft, source: action.draft.source ?? "manual" });
       setEntries((current) =>
-        sortEntries(editingEntry ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current]),
+        sortEntries(editing ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current]),
       );
-      setNotice(editingEntry ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
+      setNotice(editing ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
       setEditingEntry(null);
       setEntryInitialDraft(null);
       setIsEntryModalOpen(false);
@@ -481,16 +496,12 @@ function App() {
       source: "quick-add",
     };
 
-    setActionLoading(`quick-${item.label}`);
-    setDataError("");
-    try {
-      const saved = await createEntry(user.$id, draft);
-      setEntries((current) => sortEntries([saved, ...current]));
-      setNotice(`${item.label} saved to Appwrite.`);
-    } catch (error) {
-      setDataError(appwriteErrorMessage(error));
-    } finally {
-      setActionLoading(null);
+    const check = evaluateLimits(userLimits, entries, { draft });
+    if (check.violations.length) {
+      setPendingLimitAction({ kind: "quick", draft, quickLabel: item.label });
+      setLimitConfirmMessage(limitStatusMessage(check.violations, check, userLimits));
+      setLimitConfirmOpen(true);
+      return;
     }
 
     void saveDraft({ kind: "quick", draft, quickLabel: item.label });
@@ -664,7 +675,7 @@ function App() {
 
       <ShellBackdrop />
 
-      <div className="mx-auto grid w-full max-w-[1680px] gap-4 px-3 py-3 lg:grid-cols-[280px_1fr] lg:px-5 lg:py-5">
+      <div className="app-layout">
         <Sidebar
           activeView={activeView}
           dataLoading={dataLoading}
@@ -677,11 +688,8 @@ function App() {
           onOpenSettings={() => setActiveView("settings")}
         />
 
-        <div className="min-w-0">
-          <MobileNav activeView={activeView} onChange={setActiveView} />
-
+        <div className="app-content">
           <TopBar
-            activeTheme={activeTheme}
             activeView={activeView}
             busyAction={busyAction}
             onAdd={openNewEntry}
@@ -698,7 +706,7 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="mt-4"
+              className="app-view"
             >
               {activeView === "overview" && (
                 <OverviewView
@@ -716,6 +724,7 @@ function App() {
                   onAdd={openNewEntry}
                   onScan={openBarcodeScanner}
                   onOpenLogbook={() => setActiveView("logbook")}
+                  onOpenSettings={() => setActiveView("settings")}
                 />
               )}
 
@@ -744,7 +753,9 @@ function App() {
                   entries={entriesInView}
                   filters={filters}
                   flavours={allFlavours}
+                  userLimits={userLimits}
                   onFilterChange={setFilters}
+                  onSaveLimits={(next) => void saveUserLimits(next)}
                 />
               )}
 
@@ -777,14 +788,14 @@ function App() {
         </div>
       </div>
 
+      <MobileNav activeView={activeView} onChange={setActiveView} />
+
       <EntryModal
         entry={editingEntry}
         initialDraft={entryInitialDraft}
         flavours={allFlavours}
         open={isEntryModalOpen}
         saving={busyAction === "save-entry"}
-        userLimits={userLimits}
-        entries={entries}
         onClose={() => {
           setIsEntryModalOpen(false);
           setEditingEntry(null);
@@ -957,6 +968,7 @@ function AuthView({
               </button>
             </form>
 
+            <LegalFootnote className="mt-5" />
           </div>
         </div>
       </main>
@@ -1028,7 +1040,7 @@ function Sidebar({
   onOpenSettings: () => void;
 }) {
   return (
-    <aside className="glass-panel sticky top-5 hidden h-[calc(100vh-2.5rem)] p-3 lg:flex lg:flex-col">
+    <aside className="material-drawer glass-panel">
       <div className="mb-7 flex items-center gap-3 px-2 pt-1">
         <div className="can-emblem">
           <Command size={22} aria-hidden="true" />
@@ -1065,6 +1077,8 @@ function Sidebar({
         ))}
       </nav>
 
+      <LegalFootnote className="mb-3 px-1" />
+
       <div className="drawer-footer">
         <div className="drawer-info-card">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
@@ -1086,14 +1100,12 @@ function Sidebar({
 
 function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (view: AppView) => void }) {
   return (
-    <nav className="sticky top-3 z-30 mb-3 grid grid-cols-4 gap-1 rounded-lg border border-white/10 bg-[#090f22]/90 p-1 shadow-fridge backdrop-blur-xl lg:hidden" aria-label="Main navigation">
+    <nav className="mobile-nav-bar" aria-label="Main navigation">
       {NAV_ITEMS.map((item) => (
         <button
           key={item.id}
           type="button"
-          className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-medium transition ${
-            activeView === item.id ? "bg-cyan-300 text-[#07101f] shadow-cyan" : "text-slate-300 hover:bg-white/10"
-          }`}
+          className={`mobile-nav-item ${activeView === item.id ? "mobile-nav-item-active" : ""}`}
           onClick={() => onChange(item.id)}
         >
           <item.icon size={16} aria-hidden="true" />
@@ -1105,21 +1117,21 @@ function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (v
 }
 
 function TopBar({
-  activeTheme,
   activeView,
   busyAction,
   onAdd,
   onScan,
   className = "",
 }: {
-  activeTheme: AppTheme;
   activeView: AppView;
   busyAction: string | null;
   onAdd: () => void;
   onScan: () => void;
   className?: string;
 }) {
-  const title = NAV_ITEMS.find((item) => item.id === activeView)?.label ?? "Overview";
+  const activeItem = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
+  const ActiveIcon = activeItem.icon;
+  const title = activeItem.label;
   const subtitle = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -1215,6 +1227,7 @@ function OverviewView({
   onAdd,
   onScan,
   onOpenLogbook,
+  onOpenSettings,
 }: {
   summary: Dashboard;
   entries: RedBullEntry[];
@@ -1230,6 +1243,7 @@ function OverviewView({
   onAdd: () => void;
   onScan: () => void;
   onOpenLogbook: () => void;
+  onOpenSettings: () => void;
 }) {
   const todaySpendRaw = limitCheck.todaySpend;
   const spendLimitDetail =
@@ -1245,7 +1259,9 @@ function OverviewView({
 
       <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
 
-      <TodayPanel summary={summary} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} onScan={onScan} />
+      <div className="hidden lg:block">
+        <TodayPanel summary={summary} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} onScan={onScan} />
+      </div>
 
       {limitCheck.violations.length ? (
         <section className="limit-alert">
@@ -1342,6 +1358,8 @@ function OverviewView({
           )}
         </AppCard>
       </section>
+
+      <LegalFootnote className="mt-2" />
     </div>
   );
 }
@@ -1428,14 +1446,25 @@ function WellnessPill({ label, value }: { label: string; value: string }) {
 function TodayPanel({
   summary,
   entries,
+  userLimits,
+  limitCheck,
   onAdd,
   onScan,
 }: {
   summary: Dashboard;
   entries: RedBullEntry[];
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   onAdd: () => void;
   onScan: () => void;
 }) {
+  const limitSummary =
+    userLimits.dailyCanLimit != null || userLimits.dailySpendLimit != null
+      ? limitCheck.violations.length
+        ? limitStatusMessage(limitCheck.violations, limitCheck, userLimits)
+        : `${limitCheck.todayCans} cans · ${currency.format(limitCheck.todaySpend)} spent today`
+      : "";
+
   return (
     <section className="can-panel today-panel relative overflow-hidden p-5 sm:p-7">
       <p className="section-kicker">Today</p>
@@ -1516,9 +1545,12 @@ function LogbookView({
   onDelete: (id: string) => void;
 }) {
   return (
-    <section className="logbook-layout grid gap-4">
-      <FiltersPanel filters={filters} flavours={flavours} onChange={onFilterChange} />
-      <EntryLedger entries={entries} totalEntries={totalEntries} onAdd={onAdd} onEdit={onEdit} onDelete={onDelete} />
+    <section className="grid gap-4">
+      <div className="logbook-layout grid gap-4">
+        <FiltersPanel filters={filters} flavours={flavours} onChange={onFilterChange} />
+        <EntryLedger entries={entries} totalEntries={totalEntries} onAdd={onAdd} onEdit={onEdit} onDelete={onDelete} />
+      </div>
+      <LegalFootnote />
     </section>
   );
 }
@@ -1531,7 +1563,9 @@ function TrendsView({
   entries,
   filters,
   flavours,
+  userLimits,
   onFilterChange,
+  onSaveLimits,
 }: {
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   weekData: Array<{ label: string; spend: number; cans: number }>;
@@ -1540,7 +1574,9 @@ function TrendsView({
   entries: RedBullEntry[];
   filters: Filters;
   flavours: Flavour[];
+  userLimits: UserLimits;
   onFilterChange: (filters: Filters) => void;
+  onSaveLimits: (limits: UserLimits) => void;
 }) {
   return (
     <div className="grid gap-4">
@@ -1641,26 +1677,11 @@ function TrendsView({
           onSaveLimits={onSaveLimits}
         />
       </section>
+
+      <LegalFootnote />
     </div>
   );
 }
-
-function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries: RedBullEntry[]; user: AuthUser }) {
-  const [chats, setChats] = useState<CoachChat[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [savedChatIds, setSavedChatIds] = useState<Set<string>>(() => new Set());
-  const [chatKey, setChatKey] = useState("");
-  const [chatKeyInput, setChatKeyInput] = useState("");
-  const [chatStorageStatus, setChatStorageStatus] = useState("unlock encrypted chat storage");
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [openThinkingIds, setOpenThinkingIds] = useState<string[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
-  const messages = useMemo(() => activeChat?.messages ?? [], [activeChat]);
-  const visibleMessages = useMemo(() => messages.filter((message) => message.id !== "coach-welcome"), [messages]);
 
 function SpendForecastCard({
   entries,
@@ -1678,72 +1699,28 @@ function SpendForecastCard({
     if (!entries.length) return now;
     return new Date(
       [...entries].sort(
-        (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
-      )[0].dateTime
+        (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime(),
+      )[0].dateTime,
     );
   }, [entries, now]);
 
-  const trackingDays = useMemo(() => {
+  const activePeriodDays = useMemo(() => {
     const diffTime = Math.abs(now.getTime() - firstEntryDate.getTime());
     return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
   }, [firstEntryDate, now]);
 
-  async function unlockChatStorage(passphrase: string) {
-    setBusy(true);
-    setError("");
-    setChatStorageStatus("opening encrypted appwrite chats...");
-    try {
-      const savedChats = await listEncryptedChats(user.$id, passphrase);
-      const initialChats = savedChats.length ? savedChats : [buildNewCoachChat(user)];
-      setChatKey(passphrase);
-      setChats(initialChats);
-      setSavedChatIds(new Set(savedChats.map((chat) => chat.id)));
-      setActiveChatId(initialChats[0].id);
-      setChatStorageStatus(savedChats.length ? `${savedChats.length} encrypted chat${savedChats.length === 1 ? "" : "s"} loaded` : "new encrypted chat ready");
-    } catch (caught) {
-      const message = chatStorageErrorMessage(caught);
-      setError(message);
-      setChatKey("");
-      setChatStorageStatus("encrypted chat unlock failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function startNewChat() {
-    if (!chatKey) return;
-    const chat = buildNewCoachChat(user);
-    setChats((current) => [chat, ...current]);
-    setActiveChatId(chat.id);
-    setInput("");
-    setError("");
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await sendPrompt(input);
-  }
-
-  async function sendPrompt(prompt: string) {
-    const trimmed = prompt.trim();
-    if (!trimmed || busy) return;
-    if (!chatKey) {
-      setError("unlock encrypted chat storage first.");
-      return;
-    }
-
-    const currentChat = activeChat ?? buildNewCoachChat(user);
-    const userMessage: CoachMessage = { id: makeId(), role: "user", content: trimmed };
-    const assistantId = makeId();
-    const assistantMessage: CoachMessage = { id: assistantId, role: "assistant", content: "", thinking: "", pending: true };
-    const conversation = [...currentChat.messages, userMessage];
-    const now = new Date().toISOString();
-    setChats((current) =>
-      current.map((c) => (c.id === currentChat.id ? draftChat : c))
-    );
-    setChatStorageStatus("");
-    setInput("");
-  }
+  const stats = useMemo(() => {
+    const periodStart = new Date(now.getTime() - activePeriodDays * 86_400_000);
+    const recentEntries = entriesInRange(entries, periodStart, now);
+    const totalSpend = sum(recentEntries, spendFor);
+    const totalCans = sum(recentEntries, (entry) => entry.cans);
+    const hasData = recentEntries.length > 0;
+    return {
+      hasData,
+      avgDailySpend: hasData ? totalSpend / activePeriodDays : 0,
+      avgDailyCans: hasData ? totalCans / activePeriodDays : 0,
+    };
+  }, [entries, activePeriodDays, now]);
 
   const projectionData = useMemo<ForecastPoint[]>(() => {
     return Array.from({ length: projectionDays }).map((_, index) => {
@@ -1894,53 +1871,6 @@ function SpendForecastCard({
   );
 }
 
-function CoachMessageBubble({
-  message,
-  thinkingOpen,
-  onToggleThinking,
-}: {
-  message: CoachMessage;
-  thinkingOpen: boolean;
-  onToggleThinking: () => void;
-}) {
-  const isAssistant = message.role === "assistant";
-  const canShowThinking = isAssistant && (message.pending || Boolean(message.thinking));
-  const thinkingLabel = message.stopped ? "stopped thinking" : message.pending ? "thinking" : "thinking";
-
-  return (
-    <article className={`coach-message coach-message-${message.role}`}>
-      <div className="coach-message-bubble">
-        <p className="text-xs font-semibold uppercase text-slate-500">{isAssistant ? "coach" : "you"}</p>
-        <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white">
-          {message.content || (message.pending ? "streaming response..." : "")}
-        </div>
-
-        {canShowThinking && (
-          <div className="mt-3">
-            <button className={`thinking-slider ${message.pending ? "thinking-slider-active" : ""}`} type="button" onClick={onToggleThinking}>
-              <span className="thinking-slider-track">
-                <span>{thinkingLabel} · click to reveal reasoning</span>
-              </span>
-            </button>
-            <AnimatePresence>
-              {thinkingOpen && (
-                <motion.pre
-                  className="thinking-trace"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  {message.thinking || "waiting for reasoning trace..."}
-                </motion.pre>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
-
 function SettingsView({
   activeTheme,
   summary,
@@ -1960,6 +1890,8 @@ function SettingsView({
   onLogout,
   onReset,
   onThemeChange,
+  onSaveLimits,
+  onRerunOnboarding,
 }: {
   activeTheme: AppTheme;
   summary: Dashboard;
@@ -1979,6 +1911,8 @@ function SettingsView({
   onLogout: () => void;
   onReset: () => void;
   onThemeChange: (id: string) => void;
+  onSaveLimits: (limits: UserLimits) => void;
+  onRerunOnboarding: () => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
@@ -2075,6 +2009,8 @@ function SettingsView({
           </button>
         </AppCard>
       </div>
+
+      <LegalFootnote className="mt-2" />
     </div>
   );
 }
@@ -2474,7 +2410,6 @@ function EntryModal({
       source: entry?.source ?? initialDraft?.source ?? "manual",
     };
   }, [
-    open,
     cans,
     pricePerCan,
     isOther,
@@ -2491,11 +2426,6 @@ function EntryModal({
     entry?.source,
     initialDraft?.source,
   ]);
-
-  const draftLimitCheck = useMemo(() => {
-    if (!draftPreview) return null;
-    return evaluateLimits(userLimits, entries, { draft: draftPreview, excludeEntryId: entry?.id });
-  }, [draftPreview, entries, entry?.id, userLimits]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2940,84 +2870,6 @@ function formatMetricValue(name: string, value: number) {
   return oneDecimal.format(value);
 }
 
-async function readOllamaStream(stream: ReadableStream<Uint8Array>, onChunk: (chunk: OllamaStreamChunk) => void) {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  function processLine(line: string) {
-    const chunk = parseOllamaLine(line);
-    if (chunk) onChunk(chunk);
-  }
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    lines.forEach(processLine);
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) processLine(buffer);
-}
-
-function parseOllamaLine(line: string): OllamaStreamChunk | null {
-  const trimmed = line.trim().replace(/^data:\s*/, "");
-  if (!trimmed || trimmed === "[DONE]") return null;
-  try {
-    return JSON.parse(trimmed) as OllamaStreamChunk;
-  } catch {
-    return null;
-  }
-}
-
-function buildCoachSystemPrompt(user: AuthUser, dashboard: Dashboard, entries: RedBullEntry[]) {
-  const recent = entries
-    .slice(0, 12)
-    .map(
-      (entry) =>
-        `- ${humanDateTime(entry.dateTime)}: ${entry.cans} can(s), ${entry.flavour}, ${entry.sizeMl}ml, ${currency.format(spendFor(entry))}, ${wholeNumber.format(caffeineFor(entry))}mg caffeine, ${oneDecimal.format(sugarFor(entry))}g sugar`,
-    )
-    .join("\n");
-
-  return [
-    "You are an upbeat Red Bull intake coach inside a tracking app.",
-    "Respond entirely in lower case, including headings and short labels.",
-    "Give concise, practical suggestions based only on the logged data provided.",
-    "Do not give medical advice; suggest checking labels and using personal judgement for caffeine tolerance.",
-    `User: ${user.name || user.email || "Appwrite user"}`,
-    `Today: ${dashboard.todayCans} cans, ${dashboard.todayCaffeine} caffeine, ${dashboard.todaySugar} sugar.`,
-    `Favourite flavour: ${dashboard.favouriteFlavour}. Current streak: ${dashboard.currentStreak} day(s). Total spend: ${dashboard.totalSpend}.`,
-    `Recent entries:\n${recent || "No entries logged yet."}`,
-  ].join("\n");
-}
-
-function buildNewCoachChat(user: AuthUser): CoachChat {
-  const now = new Date().toISOString();
-  return {
-    id: makeId(),
-    userId: user.$id,
-    title: "new chat",
-    createdAt: now,
-    updatedAt: now,
-    messages: [
-      {
-        id: "coach-welcome",
-        role: "assistant",
-        content: `hey ${firstName(user).toLocaleLowerCase()}, i can help with caffeine pace, sugar swaps, spend trends, and smarter quick-add choices.`,
-      },
-    ],
-  };
-}
-
-function titleForChat(currentTitle: string, prompt: string) {
-  if (currentTitle !== "new chat") return currentTitle;
-  const cleaned = prompt.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  return cleaned.length > 48 ? `${cleaned.slice(0, 45)}...` : cleaned || "new chat";
-}
-
 function firstName(user: AuthUser) {
   const fallback = user.email?.split("@")[0] ?? "there";
   const value = (user.name || fallback).trim();
@@ -3040,5 +2892,4 @@ function actionLabel(value: string) {
     .replace(/-/g, " ");
 }
 
-}
 export default App;

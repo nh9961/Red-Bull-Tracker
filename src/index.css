@@ -85,15 +85,29 @@ textarea:focus-visible {
 .app-layout {
   display: grid;
   width: 100%;
-  max-width: 1580px;
-  gap: 18px;
+  max-width: 1680px;
+  gap: 16px;
   margin: 0 auto;
-  padding: 8px 12px calc(108px + env(safe-area-inset-bottom, 0px));
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    calc(92px + env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
 }
 
 .app-content,
 .app-main {
   min-width: 0;
+}
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.app-view {
+  margin-top: 16px;
 }
 
 .app-main {
@@ -296,29 +310,39 @@ textarea:focus-visible {
 .mobile-nav-bar {
   position: fixed;
   right: 12px;
-  bottom: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
   left: 12px;
   z-index: 40;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
   padding: 6px;
-  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid #d8e1ee;
   border-radius: 24px;
   box-shadow: 0 12px 34px rgba(60, 64, 67, 0.16);
+  backdrop-filter: blur(12px);
 }
 
 .mobile-nav-item {
+  display: flex;
   min-height: 54px;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
+  border: 0;
+  border-radius: 16px;
   color: #5f6670;
   background: transparent;
-  border: 0;
   box-shadow: none;
   font-size: 11px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mobile-nav-item:hover {
+  background: #f1f5fb;
 }
 
 .mobile-nav-item-active {
@@ -399,7 +423,7 @@ textarea:focus-visible {
 }
 
 .hero-icon-row {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   justify-content: center;
   gap: 26px;
@@ -1241,11 +1265,16 @@ textarea:focus-visible {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .app-layout {
-    padding: 14px 20px calc(112px + env(safe-area-inset-bottom, 0px));
+    padding:
+      max(14px, env(safe-area-inset-top, 0px))
+      20px
+      calc(96px + env(safe-area-inset-bottom, 0px));
   }
+}
 
+@media (min-width: 768px) {
   .home-hero {
     padding: clamp(20px, 3vw, 40px) 16px 24px;
   }
@@ -1279,9 +1308,10 @@ textarea:focus-visible {
 
 @media (min-width: 1024px) {
   .app-layout {
-    grid-template-columns: 286px minmax(0, 1fr);
-    gap: 30px;
-    padding: 18px 26px 26px;
+    grid-template-columns: minmax(268px, 300px) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+    padding: 24px 28px 28px;
   }
 
   .material-drawer {
@@ -1292,8 +1322,12 @@ textarea:focus-visible {
     display: none;
   }
 
-  .app-main {
-    margin-top: 6px;
+  .app-view {
+    margin-top: 8px;
+  }
+
+  .hero-icon-row {
+    display: flex;
   }
 
   .top-app-bar--overview {
@@ -1407,6 +1441,79 @@ textarea:focus-visible {
     font-size: 11px;
     padding: 0 4px;
   }
+}
+
+.legal-footnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  padding-top: 0.25rem;
+  font-size: 11px;
+  color: var(--subtle, #64748b);
+}
+
+.legal-footnote-site {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.legal-footnote-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.legal-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.legal-tooltip-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary, #2563c7);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+.legal-tooltip-trigger:hover,
+.legal-tooltip-trigger:focus-visible {
+  color: var(--primary-strong, #174ea6);
+}
+
+.legal-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: min(280px, 72vw);
+  transform: translateX(-50%);
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.96);
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.legal-tooltip-wrap:hover .legal-tooltip,
+.legal-tooltip-wrap:focus-within .legal-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 @media (max-width: 380px) {
