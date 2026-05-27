@@ -64,6 +64,7 @@ const PREFERRED_SCAN_CONSTRAINTS: MediaStreamConstraints = {
   audio: false,
 };
 const IOS_NATIVE_SCAN_INTERVAL_MS = 150;
+const VIDEO_READY_TIMEOUT_MS = 10_000;
 
 export async function startBarcodeScanner(
   videoElement: HTMLVideoElement,
@@ -125,7 +126,8 @@ function startNativeBarcodeScanner(
   return new Promise((resolve, reject) => {
     let stopped = false;
     let animationFrame = 0;
-    let scanInterval = 0;
+    let scanTimeout = 0;
+    let scanning = false;
     let stream: MediaStream | null = null;
 
     async function start() {
@@ -143,14 +145,15 @@ function startNativeBarcodeScanner(
         const stop = () => {
           stopped = true;
           window.cancelAnimationFrame(animationFrame);
-          window.clearInterval(scanInterval);
+          window.clearTimeout(scanTimeout);
           stopVideoStream(videoElement);
         };
 
         const scan = async () => {
-          if (stopped) return;
+          if (stopped || scanning) return;
+          scanning = true;
           try {
-            if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0) {
+            if (isVideoFrameReady(videoElement)) {
               const barcodes = await detector.detect(videoElement);
               const barcode = barcodes.find((item) => normalizeBarcode(item.rawValue ?? ""));
               if (barcode?.rawValue) {
@@ -162,21 +165,29 @@ function startNativeBarcodeScanner(
             }
           } catch {
             // Keep scanning; transient frame errors are common on mobile Safari.
+          } finally {
+            scanning = false;
           }
         };
 
-        const scheduleScan = () => {
+        const scheduleNextScan = () => {
           if (stopped) return;
-          void scan().finally(() => {
-            if (!stopped) animationFrame = window.requestAnimationFrame(scheduleScan);
+          if (isAppleMobileDevice()) {
+            scanTimeout = window.setTimeout(() => {
+              void scan().finally(() => {
+                if (!stopped) scheduleNextScan();
+              });
+            }, IOS_NATIVE_SCAN_INTERVAL_MS);
+            return;
+          }
+          animationFrame = window.requestAnimationFrame(() => {
+            void scan().finally(() => {
+              if (!stopped) scheduleNextScan();
+            });
           });
         };
 
-        if (isAppleMobileDevice()) {
-          scanInterval = window.setInterval(() => void scan(), IOS_NATIVE_SCAN_INTERVAL_MS);
-        } else {
-          animationFrame = window.requestAnimationFrame(scheduleScan);
-        }
+        scheduleNextScan();
 
         resolve({ mode: "native", stop });
       } catch (error) {
@@ -278,28 +289,58 @@ function prepareVideoElement(videoElement: HTMLVideoElement, stream: MediaStream
   videoElement.muted = true;
 }
 
+function isVideoFrameReady(videoElement: HTMLVideoElement) {
+  return videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0;
+}
+
 async function waitForVideoReady(videoElement: HTMLVideoElement) {
-  if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0) {
+  if (isVideoFrameReady(videoElement)) {
     await playVideoElement(videoElement);
     return;
   }
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+
+    const tryReady = () => {
+      if (!isVideoFrameReady(videoElement)) return false;
+      settle(() => {
+        void playVideoElement(videoElement).then(resolve).catch(reject);
+      });
+      return true;
+    };
+
     const onReady = () => {
-      cleanup();
-      void playVideoElement(videoElement).then(resolve).catch(reject);
+      tryReady();
     };
+
     const onError = () => {
-      cleanup();
-      reject(new Error("Camera preview failed to start."));
+      settle(() => reject(new Error("Camera preview failed to start.")));
     };
+
     const cleanup = () => {
+      window.clearTimeout(timeoutId);
       videoElement.removeEventListener("loadedmetadata", onReady);
+      videoElement.removeEventListener("loadeddata", onReady);
       videoElement.removeEventListener("error", onError);
     };
 
-    videoElement.addEventListener("loadedmetadata", onReady, { once: true });
+    const timeoutId = window.setTimeout(() => {
+      settle(() => reject(new Error("Camera preview timed out.")));
+    }, VIDEO_READY_TIMEOUT_MS);
+
+    videoElement.addEventListener("loadedmetadata", onReady);
+    videoElement.addEventListener("loadeddata", onReady);
     videoElement.addEventListener("error", onError, { once: true });
+
+    tryReady();
   });
 }
 

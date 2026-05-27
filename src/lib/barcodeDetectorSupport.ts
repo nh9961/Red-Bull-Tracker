@@ -1,7 +1,12 @@
-import { BarcodeDetectorPolyfill } from "@undecaf/barcode-detector-polyfill";
+type BarcodeDetectorConstructor = {
+  new (options?: { formats?: string[] }): {
+    detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string; format?: string }>>;
+  };
+  getSupportedFormats?: () => Promise<string[]>;
+};
 
 type WindowWithBarcodeDetector = Window & {
-  BarcodeDetector?: typeof BarcodeDetectorPolyfill;
+  BarcodeDetector?: BarcodeDetectorConstructor;
 };
 
 let detectorReady: Promise<void> | null = null;
@@ -12,6 +17,11 @@ export function isAppleMobileDevice() {
   return /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+async function loadBarcodeDetectorPolyfill() {
+  const { BarcodeDetectorPolyfill } = await import("@undecaf/barcode-detector-polyfill");
+  return BarcodeDetectorPolyfill;
+}
+
 export function ensureBarcodeDetector() {
   if (detectorReady) return detectorReady;
 
@@ -20,14 +30,16 @@ export function ensureBarcodeDetector() {
     const shouldForcePolyfill = isAppleMobileDevice();
 
     if (shouldForcePolyfill) {
-      globalWindow.BarcodeDetector = BarcodeDetectorPolyfill;
+      globalWindow.BarcodeDetector = await loadBarcodeDetectorPolyfill();
       return;
     }
 
     try {
-      await globalWindow.BarcodeDetector?.getSupportedFormats();
+      const getSupportedFormats = globalWindow.BarcodeDetector?.getSupportedFormats;
+      if (!getSupportedFormats) return;
+      await getSupportedFormats.call(globalWindow.BarcodeDetector);
     } catch {
-      globalWindow.BarcodeDetector = BarcodeDetectorPolyfill;
+      globalWindow.BarcodeDetector = await loadBarcodeDetectorPolyfill();
     }
   })();
 
