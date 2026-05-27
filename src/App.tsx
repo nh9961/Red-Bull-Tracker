@@ -4,7 +4,7 @@ import {
   AlertTriangle,
   Brain,
   CalendarDays,
-  CheckCircle2,
+  Camera,
   ChevronRight,
   Cloud,
   Command,
@@ -20,8 +20,6 @@ import {
   Lock,
   LogIn,
   LogOut,
-  MessageCircle,
-  MessageSquarePlus,
   Plus,
   PoundSterling,
   RefreshCcw,
@@ -70,12 +68,11 @@ import {
 import { BUILT_IN_FLAVOURS, DEFAULT_FLAVOUR, accentForCustomFlavour, flavourMeta, mergedFlavours } from "./data/flavours";
 import {
   APP_THEMES,
-  THEME_CATEGORIES,
   THEME_STORAGE_KEY,
   getThemeById,
+  normaliseThemeId,
   readStoredThemeId,
   type AppTheme,
-  type ThemeCategory,
 } from "./data/themes";
 import { themeTokensToStyle } from "./lib/themeTokens";
 import { account, appwriteConfig, Channel, client, OAuthProvider, pingAppwrite } from "./lib/appwrite";
@@ -88,13 +85,17 @@ import {
   listEntries,
   updateEntry,
 } from "./lib/appwriteEntries";
+import { BarcodeScannerModal } from "./components/BarcodeScannerModal";
+import { DailyLimitsCard } from "./components/DailyLimitsCard";
+import { LimitsSettingsForm } from "./components/LimitsSettingsForm";
+import { OnboardingScreen } from "./components/OnboardingScreen";
+import { buildDynamicGreeting } from "./lib/greeting";
 import {
-  chatStorageErrorMessage,
-  createEncryptedChat,
-  deleteEncryptedChat,
-  listEncryptedChats,
-  updateEncryptedChat,
-} from "./lib/encryptedChats";
+  evaluateLimits,
+  limitStatusMessage,
+  mergePrefsWithLimits,
+  parseUserLimits,
+} from "./lib/userLimits";
 import { createExcelExport, downloadBlob, parseExcelImport } from "./lib/excel";
 import {
   caffeineFor,
@@ -125,13 +126,20 @@ import {
 import { exportPayload, parseImport } from "./lib/storage";
 import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
 
-type AppView = "overview" | "logbook" | "trends" | "coach" | "settings";
+type AppView = "overview" | "logbook" | "trends" | "settings";
 type AuthMode = "login" | "signup";
 type AuthUser = Models.User<Models.Preferences>;
 type SetupStatus = { state: "checking" | "ok" | "error"; message: string };
 type OllamaStreamChunk = { error?: string; message?: { content?: string; thinking?: string } };
 const OLLAMA_MODEL = "deepseek-v4-pro:cloud";
 const OLLAMA_PROXY_URL = import.meta.env.VITE_OLLAMA_PROXY_URL?.trim() || "/api/ollama-chat";
+
+type ForecastPoint = {
+  label: string;
+  current: number;
+  lower: number;
+  limit?: number;
+};
 
 const DEFAULT_FILTERS: Filters = {
   flavour: "all",
@@ -152,7 +160,6 @@ const NAV_ITEMS: Array<{ id: AppView; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "logbook", label: "Logbook", icon: CalendarDays },
   { id: "trends", label: "Trends", icon: LineChart },
-  { id: "coach", label: "Coach", icon: MessageCircle },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -171,30 +178,37 @@ function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [activeView, setActiveView] = useState<AppView>("overview");
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
+  const [entryInitialDraft, setEntryInitialDraft] = useState<EntryDraft | null>(null);
   const [editingEntry, setEditingEntry] = useState<RedBullEntry | null>(null);
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [notice, setNotice] = useState("Appwrite session pending.");
   const [dataLoading, setDataLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [dataError, setDataError] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState("");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [userLimits, setUserLimits] = useState<UserLimits>({});
+  const [limitConfirmOpen, setLimitConfirmOpen] = useState(false);
+  const [limitConfirmMessage, setLimitConfirmMessage] = useState("");
+  const [pendingLimitAction, setPendingLimitAction] = useState<PendingLimitAction | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
   const excelFileInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    localStorage.setItem(THEME_STORAGE_KEY, themeId);
+    localStorage.setItem(THEME_STORAGE_KEY, normaliseThemeId(themeId));
   }, [themeId]);
 
   const refreshEntries = useCallback(async (userId: string, showLoader = true) => {
     if (showLoader) setDataLoading(true);
-    setDataError("");
+    setSyncError("");
     try {
       const remoteEntries = await listEntries(userId);
       setEntries(sortEntries(remoteEntries));
       setNotice(`Synced ${remoteEntries.length} Appwrite entr${remoteEntries.length === 1 ? "y" : "ies"}.`);
     } catch (error) {
       const message = appwriteErrorMessage(error);
-      setDataError(message);
+      setSyncError(message);
       setNotice("Appwrite sync failed.");
     } finally {
       if (showLoader) setDataLoading(false);
@@ -223,7 +237,14 @@ function App() {
         const currentUser = await account.get();
         if (!mounted) return;
         setUser(currentUser);
+        setUserLimits(parseUserLimits(currentUser.prefs));
+        if (typeof currentUser.prefs.themeId === "string" && currentUser.prefs.themeId) {
+          setThemeId(normaliseThemeId(currentUser.prefs.themeId));
+        }
         setNotice(`Signed in as ${currentUser.email || currentUser.name || "Appwrite user"}.`);
+        if (!currentUser.prefs.onboarded) {
+          setSetupOpen(true);
+        }
       } catch {
         if (!mounted) return;
         setUser(null);
@@ -266,34 +287,42 @@ function App() {
     () => mergedFlavours(entries.map((entry) => entry.flavour)),
     [entries],
   );
-  const filteredEntries = useMemo(
+  const entriesInView = useMemo(
     () => sortEntries(applyFilters(entries, filters)),
     [entries, filters],
   );
-  const dashboard = useMemo(() => buildDashboard(entries), [entries]);
-  const chartData = useMemo(() => groupByDay(filteredEntries), [filteredEntries]);
-  const weekData = useMemo(() => groupByWeek(filteredEntries), [filteredEntries]);
-  const flavourData = useMemo(() => groupByFlavour(filteredEntries), [filteredEntries]);
+  const summary = useMemo(() => buildDashboard(entries), [entries]);
+  const limitCheck = useMemo(() => evaluateLimits(userLimits, entries), [userLimits, entries]);
+  const chartData = useMemo(() => groupByDay(entriesInView), [entriesInView]);
+  const weekData = useMemo(() => groupByWeek(entriesInView), [entriesInView]);
+  const flavourData = useMemo(() => groupByFlavour(entriesInView), [entriesInView]);
   const insights = useMemo(() => buildInsights(entries), [entries]);
   const recentEntries = useMemo(() => entries.slice(0, 5), [entries]);
 
   async function login(email: string, password: string) {
-    setActionLoading("auth");
+    setBusyAction("auth");
     setAuthError("");
     try {
       await account.createEmailPasswordSession({ email, password });
       const currentUser = await account.get();
       setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      if (typeof currentUser.prefs.themeId === "string" && currentUser.prefs.themeId) {
+        setThemeId(normaliseThemeId(currentUser.prefs.themeId));
+      }
       setNotice(`Signed in as ${currentUser.email}.`);
+      if (!currentUser.prefs.onboarded) {
+        setSetupOpen(true);
+      }
     } catch (error) {
       setAuthError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   async function signup(name: string, email: string, password: string) {
-    setActionLoading("auth");
+    setBusyAction("auth");
     setAuthError("");
     try {
       await account.create({
@@ -306,16 +335,17 @@ function App() {
       const currentUser = await account.get();
       setUser(currentUser);
       setNotice(`Welcome, ${currentUser.name || currentUser.email}.`);
+      setSetupOpen(true);
     } catch (error) {
       setAuthError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   function startOAuth(provider: "github" | "google") {
     const selectedProvider = provider === "github" ? OAuthProvider.Github : OAuthProvider.Google;
-    setActionLoading("oauth");
+    setBusyAction("oauth");
     account.createOAuth2Session({
       provider: selectedProvider,
       success: appwriteConfig.oauthSuccessUrl,
@@ -324,44 +354,126 @@ function App() {
   }
 
   async function logout() {
-    setActionLoading("logout");
-    setDataError("");
+    setBusyAction("logout");
+    setSyncError("");
     try {
       await account.deleteSession({ sessionId: "current" });
       setUser(null);
       setEntries([]);
       setNotice("Logged out.");
     } catch (error) {
-      setDataError(appwriteErrorMessage(error));
+      setSyncError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   function openNewEntry() {
     setEditingEntry(null);
+    setEntryInitialDraft(null);
+    setIsEntryModalOpen(true);
+  }
+
+  function openBarcodeScanner() {
+    setIsBarcodeScannerOpen(true);
+  }
+
+  function addBarcodeDraft(draft: EntryDraft) {
+    setIsBarcodeScannerOpen(false);
+    saveDraftWithLimitCheck(draft);
+  }
+
+  function editBarcodeDraft(draft: EntryDraft) {
+    setIsBarcodeScannerOpen(false);
+    setEditingEntry(null);
+    setEntryInitialDraft(draft);
     setIsEntryModalOpen(true);
   }
 
   async function saveEntry(draft: EntryDraft) {
     if (!user) return;
-    setActionLoading("save-entry");
-    setDataError("");
+    setBusyAction("save-limits");
+    setSyncError("");
     try {
-      const saved = editingEntry
-        ? await updateEntry(user.$id, editingEntry.id, { ...draft, source: editingEntry.source })
-        : await createEntry(user.$id, { ...draft, source: "manual" });
+      const prefs = mergePrefsWithLimits(user.prefs, next);
+      await account.updatePrefs(prefs);
+      const currentUser = await account.get();
+      setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      setNotice("Daily limits saved to your account.");
+    } catch (error) {
+      setSyncError(appwriteErrorMessage(error));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function saveOnboarding(limits: UserLimits, onboardingThemeId: string) {
+    if (!user) return;
+    setBusyAction("save-onboarding");
+    setSyncError("");
+    try {
+      const limitsPrefs = mergePrefsWithLimits(user.prefs, limits);
+      const nextPrefs = {
+        ...limitsPrefs,
+        themeId: onboardingThemeId,
+        onboarded: true,
+      };
+      await account.updatePrefs(nextPrefs);
+      const currentUser = await account.get();
+      setUser(currentUser);
+      setUserLimits(parseUserLimits(currentUser.prefs));
+      setThemeId(onboardingThemeId);
+      setSetupOpen(false);
+      setNotice("Setup saved.");
+    } catch (error) {
+      setSyncError(appwriteErrorMessage(error));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function saveDraft(action: PendingLimitAction) {
+    if (!user) return;
+    const loadingKey = action.kind === "quick" ? `quick-${action.quickLabel ?? "add"}` : "save-entry";
+    setBusyAction(loadingKey);
+    setSyncError("");
+    try {
+      const editing = action.editingId ? entries.find((entry) => entry.id === action.editingId) : null;
+      const saved = editing
+        ? await updateEntry(user.$id, editing.id, { ...action.draft, source: editing.source })
+        : await createEntry(user.$id, { ...action.draft, source: action.draft.source ?? "manual" });
       setEntries((current) =>
         sortEntries(editingEntry ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current]),
       );
       setNotice(editingEntry ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
       setEditingEntry(null);
+      setEntryInitialDraft(null);
       setIsEntryModalOpen(false);
     } catch (error) {
-      setDataError(appwriteErrorMessage(error));
+      setSyncError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
+      setLimitConfirmOpen(false);
+      setPendingLimitAction(null);
+      setLimitConfirmMessage("");
     }
+  }
+
+  function saveDraftWithLimitCheck(draft: EntryDraft, editingId?: string) {
+    const check = evaluateLimits(userLimits, entries, { draft, excludeEntryId: editingId });
+    if (check.violations.length) {
+      setPendingLimitAction({ kind: "save", draft, editingId });
+      setLimitConfirmMessage(limitStatusMessage(check.violations, check, userLimits));
+      setLimitConfirmOpen(true);
+      return;
+    }
+    void saveDraft({ kind: "save", draft, editingId });
+  }
+
+  async function saveEntryDraft(draft: EntryDraft) {
+    if (!user) return;
+    saveDraftWithLimitCheck(draft, editingEntry?.id);
   }
 
   async function quickAdd(item: (typeof QUICK_ADDS)[number]) {
@@ -391,25 +503,32 @@ function App() {
     } finally {
       setActionLoading(null);
     }
+
+    void saveDraft({ kind: "quick", draft, quickLabel: item.label });
+  }
+
+  function confirmLimitOverride() {
+    if (!pendingLimitAction) return;
+    void saveDraft(pendingLimitAction);
   }
 
   async function deleteEntry(id: string) {
-    setActionLoading(`delete-${id}`);
-    setDataError("");
+    setBusyAction(`delete-${id}`);
+    setSyncError("");
     try {
       await deleteEntryDocument(id);
       setEntries((current) => current.filter((entry) => entry.id !== id));
       setNotice("Entry deleted from Appwrite.");
     } catch (error) {
-      setDataError(appwriteErrorMessage(error));
+      setSyncError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   async function resetAll() {
-    setActionLoading("reset");
-    setDataError("");
+    setBusyAction("reset");
+    setSyncError("");
     try {
       await Promise.all(entries.map((entry) => deleteEntryDocument(entry.id)));
       setEntries([]);
@@ -417,39 +536,39 @@ function App() {
       setIsResetOpen(false);
       setNotice("All Appwrite entries deleted.");
     } catch (error) {
-      setDataError(appwriteErrorMessage(error));
+      setSyncError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   async function exportExcel() {
-    setActionLoading("excel-export");
-    setDataError("");
+    setBusyAction("excel-export");
+    setSyncError("");
     try {
       const blob = await createExcelExport(entries);
       downloadBlob(blob, `red-bull-intake-${new Date().toISOString().slice(0, 10)}.xlsx`);
       setNotice("Excel workbook exported.");
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Excel export failed.");
+      setSyncError(error instanceof Error ? error.message : "Excel export failed.");
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
   async function importExcel(file: File | undefined) {
     if (!file) return;
-    setActionLoading("excel-import");
-    setDataError("");
+    setBusyAction("excel-import");
+    setSyncError("");
     try {
       const preview = await parseExcelImport(file, entries);
       setImportPreview(preview);
       setNotice(`${preview.rows.length} Excel row${preview.rows.length === 1 ? "" : "s"} parsed for review.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Excel import failed.");
+      setSyncError(error instanceof Error ? error.message : "Excel import failed.");
     } finally {
       if (excelFileInputRef.current) excelFileInputRef.current.value = "";
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
@@ -464,17 +583,17 @@ function App() {
       return;
     }
 
-    setActionLoading("confirm-excel-import");
-    setDataError("");
+    setBusyAction("confirm-excel-import");
+    setSyncError("");
     try {
       const saved = await createEntries(user.$id, drafts);
       setEntries((current) => sortEntries([...saved, ...current]));
       setImportPreview(null);
       setNotice(`${saved.length} Excel row${saved.length === 1 ? "" : "s"} saved to Appwrite.`);
     } catch (error) {
-      setDataError(appwriteErrorMessage(error));
+      setSyncError(appwriteErrorMessage(error));
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
@@ -486,8 +605,8 @@ function App() {
 
   async function importJson(file: File | undefined) {
     if (!file || !user) return;
-    setActionLoading("json-import");
-    setDataError("");
+    setBusyAction("json-import");
+    setSyncError("");
     try {
       const drafts = parseImport(await file.text());
       const uniqueDrafts = drafts.filter((draft) => !isDuplicateDraft(entries, draft));
@@ -499,10 +618,10 @@ function App() {
       setEntries((current) => sortEntries([...saved, ...current]));
       setNotice(`${saved.length} JSON entr${saved.length === 1 ? "y" : "ies"} saved to Appwrite.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "JSON import failed.");
+      setSyncError(error instanceof Error ? error.message : "JSON import failed.");
     } finally {
       if (jsonFileInputRef.current) jsonFileInputRef.current.value = "";
-      setActionLoading(null);
+      setBusyAction(null);
     }
   }
 
@@ -514,7 +633,7 @@ function App() {
     return (
       <AuthView
         authError={authError}
-        busy={actionLoading === "auth" || actionLoading === "oauth"}
+        busy={busyAction === "auth" || busyAction === "oauth"}
         setupStatus={setupStatus}
         shellStyle={shellStyle}
         themeId={themeId}
@@ -527,10 +646,19 @@ function App() {
 
   return (
     <div
-      className="app-shell min-h-screen overflow-x-hidden bg-[#050711] text-slate-100"
+      className="app-shell min-h-screen overflow-x-hidden"
       data-theme={themeId}
       style={shellStyle}
     >
+      {setupOpen && user && (
+        <OnboardingScreen
+          userName={user.name || undefined}
+          activeThemeId={themeId}
+          onThemeChange={setThemeId}
+          onSave={saveOnboarding}
+          onClose={() => setSetupOpen(false)}
+        />
+      )}
       <input
         ref={excelFileInputRef}
         className="hidden"
@@ -556,6 +684,7 @@ function App() {
           setupStatus={setupStatus}
           user={user}
           onAdd={openNewEntry}
+          onScan={openBarcodeScanner}
           onChange={setActiveView}
           onOpenSettings={() => setActiveView("settings")}
         />
@@ -566,18 +695,13 @@ function App() {
           <TopBar
             activeTheme={activeTheme}
             activeView={activeView}
-            actionLoading={actionLoading}
-            dataLoading={dataLoading}
-            entries={entries}
-            user={user}
+            busyAction={busyAction}
             onAdd={openNewEntry}
-            onExportExcel={() => void exportExcel()}
-            onImportExcel={() => excelFileInputRef.current?.click()}
-            onOpenSettings={() => setActiveView("settings")}
-            onRefresh={() => void refreshEntries(user.$id)}
+            onScan={openBarcodeScanner}
+            className={activeView === "overview" ? "top-app-bar--overview" : ""}
           />
 
-          <StatusRail actionLoading={actionLoading} dataError={dataError} setupStatus={setupStatus} />
+          <StatusRail busyAction={busyAction} syncError={syncError} setupStatus={setupStatus} />
 
           <AnimatePresence mode="wait">
             <motion.main
@@ -590,7 +714,7 @@ function App() {
             >
               {activeView === "overview" && (
                 <OverviewView
-                  dashboard={dashboard}
+                  summary={summary}
                   entries={entries}
                   insights={insights}
                   quickAdds={QUICK_ADDS}
@@ -598,16 +722,18 @@ function App() {
                   chartData={chartData}
                   flavourData={flavourData}
                   user={user}
+                  userLimits={userLimits}
+                  limitCheck={limitCheck}
                   onQuickAdd={(item) => void quickAdd(item)}
                   onAdd={openNewEntry}
-                  onOpenCoach={() => setActiveView("coach")}
+                  onScan={openBarcodeScanner}
                   onOpenLogbook={() => setActiveView("logbook")}
                 />
               )}
 
               {activeView === "logbook" && (
                 <LogbookView
-                  entries={filteredEntries}
+                  entries={entriesInView}
                   totalEntries={entries.length}
                   filters={filters}
                   flavours={allFlavours}
@@ -627,26 +753,26 @@ function App() {
                   weekData={weekData}
                   flavourData={flavourData}
                   insights={insights}
-                  entries={filteredEntries}
+                  entries={entriesInView}
                   filters={filters}
                   flavours={allFlavours}
                   onFilterChange={setFilters}
                 />
               )}
 
-              {activeView === "coach" && <CoachView dashboard={dashboard} entries={entries} user={user} />}
-
               {activeView === "settings" && (
                 <SettingsView
                   activeTheme={activeTheme}
-                  dashboard={dashboard}
+                  summary={summary}
                   dataLoading={dataLoading}
                   entries={entries}
                   notice={notice}
                   setupStatus={setupStatus}
                   themeId={themeId}
                   user={user}
-                  actionLoading={actionLoading}
+                  userLimits={userLimits}
+                  limitCheck={limitCheck}
+                  busyAction={busyAction}
                   onExportExcel={() => void exportExcel()}
                   onImportExcel={() => excelFileInputRef.current?.click()}
                   onExportJson={exportJson}
@@ -654,6 +780,8 @@ function App() {
                   onLogout={() => void logout()}
                   onReset={() => setIsResetOpen(true)}
                   onThemeChange={setThemeId}
+                  onSaveLimits={(next) => void saveUserLimits(next)}
+                  onRerunOnboarding={() => setSetupOpen(true)}
                 />
               )}
             </motion.main>
@@ -663,31 +791,59 @@ function App() {
 
       <EntryModal
         entry={editingEntry}
+        initialDraft={entryInitialDraft}
         flavours={allFlavours}
         open={isEntryModalOpen}
-        saving={actionLoading === "save-entry"}
+        saving={busyAction === "save-entry"}
+        userLimits={userLimits}
+        entries={entries}
         onClose={() => {
           setIsEntryModalOpen(false);
           setEditingEntry(null);
+          setEntryInitialDraft(null);
         }}
-        onSave={(draft) => void saveEntry(draft)}
+        onSave={(draft) => void saveEntryDraft(draft)}
+      />
+
+      <BarcodeScannerModal
+        busy={busyAction === "save-entry"}
+        flavours={allFlavours}
+        open={isBarcodeScannerOpen}
+        userId={user.$id}
+        onAddNow={addBarcodeDraft}
+        onClose={() => setIsBarcodeScannerOpen(false)}
+        onEditBeforeAdding={editBarcodeDraft}
       />
 
       <ImportPreviewModal
-        busy={actionLoading === "confirm-excel-import"}
+        busy={busyAction === "confirm-excel-import"}
         preview={importPreview}
         onClose={() => setImportPreview(null)}
         onConfirm={() => void confirmExcelImport()}
       />
 
       <ConfirmDialog
-        busy={actionLoading === "reset"}
+        busy={busyAction === "reset"}
         open={isResetOpen}
         title="Delete all Appwrite entries?"
         body="This removes every intake entry owned by your current Appwrite user. Export first if you want a backup."
         confirmLabel="Delete all"
         onCancel={() => setIsResetOpen(false)}
         onConfirm={() => void resetAll()}
+      />
+
+      <ConfirmDialog
+        busy={Boolean(busyAction && pendingLimitAction)}
+        open={limitConfirmOpen}
+        title="Over your limit?"
+        body={limitConfirmMessage || "This intake goes past one of your daily limits."}
+        confirmLabel="Log anyway"
+        onCancel={() => {
+          setLimitConfirmOpen(false);
+          setPendingLimitAction(null);
+          setLimitConfirmMessage("");
+        }}
+        onConfirm={confirmLimitOverride}
       />
     </div>
   );
@@ -713,15 +869,15 @@ function LoadingScreen({
   themeId: string;
 }) {
   return (
-    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-theme={themeId} style={shellStyle}>
+    <div className="app-shell min-h-screen" data-theme={themeId} style={shellStyle}>
       <ShellBackdrop />
       <div className="flex min-h-screen items-center justify-center p-6">
         <div className="glass-panel w-full max-w-md p-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-300/10 text-cyan-200">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg metric-tile-icon">
             <Loader2 className="animate-spin" size={24} aria-hidden="true" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight text-white">Red Bull command centre</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{setupStatus.message}</p>
+          <h1 className="app-card-title mt-5 text-2xl">Red Bull tracker</h1>
+          <p className="app-card-subtitle mt-3 leading-6">{setupStatus.message}</p>
         </div>
       </div>
     </div>
@@ -762,82 +918,75 @@ function AuthView({
   }
 
   return (
-    <div className="app-shell min-h-screen bg-[#050711] text-slate-100" data-theme={themeId} style={shellStyle}>
+    <div className="app-shell min-h-screen" data-theme={themeId} style={shellStyle}>
       <ShellBackdrop />
-      <main className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 px-4 py-8 lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="min-w-0">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100">
-            <Cloud size={16} aria-hidden="true" />
-            {setupStatus.state === "ok" ? "Appwrite sync online" : "Appwrite setup check"}
-          </div>
-          <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-white sm:text-6xl">
-            Red Bull Tracker App
-          </h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">
-            Glossy intake telemetry with Appwrite authentication, device sync, and finance-grade Excel exports.
-          </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <AuthSignal icon={ShieldCheck} label="User scoped" value="Private entries" />
-            <AuthSignal icon={Database} label="Database" value={appwriteConfig.databaseId} />
-            <AuthSignal icon={CheckCircle2} label="Ping" value={setupStatus.state === "ok" ? "Connected" : "Check setup"} />
-          </div>
-          {setupStatus.state !== "ok" && (
-            <div className="mt-4 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
-              {setupStatus.message}
-            </div>
-          )}
-        </section>
-
-        <section className="glass-panel p-5 sm:p-6">
-          <div className="mb-5 flex rounded-md border border-white/10 bg-white/5 p-1">
-            <button
-              className={`flex-1 rounded px-3 py-2 text-sm font-semibold transition ${mode === "login" ? "bg-cyan-300 text-[#07101f]" : "text-slate-300 hover:bg-white/10"}`}
-              type="button"
-              onClick={() => setMode("login")}
-            >
-              Log in
-            </button>
-            <button
-              className={`flex-1 rounded px-3 py-2 text-sm font-semibold transition ${mode === "signup" ? "bg-pink-200 text-[#07101f]" : "text-slate-300 hover:bg-white/10"}`}
-              type="button"
-              onClick={() => setMode("signup")}
-            >
-              Sign up
-            </button>
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <div className="auth-panel-shell">
+          <div className="mb-8 text-center">
+            <h1 className="hero-name text-3xl">Red Bull tracker</h1>
+            <p className="hero-copy mt-2 text-sm">Track intake, sync across devices.</p>
           </div>
 
-          <form className="grid gap-4" onSubmit={submit}>
-            {mode === "signup" && (
-              <label className="field-label">
-                Name
-                <input className="field-control" type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ned" />
-              </label>
-            )}
-            <label className="field-label">
-              Email
-              <input className="field-control" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
-            </label>
-            <label className="field-label">
-              Password
-              <input className="field-control" minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8+ characters" required />
-            </label>
-
-            {authError && (
-              <div className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-                {authError}
+          <div className="auth-panel-card">
+            {setupStatus.state !== "ok" && (
+              <div className="limit-alert mb-4 px-3 py-2 text-xs">
+                {setupStatus.message}
               </div>
             )}
 
-            <button className="primary-button w-full" type="submit" disabled={busy}>
-              {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <LogIn size={17} aria-hidden="true" />}
-              {mode === "signup" ? "Create account" : "Log in"}
-            </button>
-          </form>
+            <div className="auth-mode-toggle mb-5">
+              <button className={mode === "login" ? "auth-mode-active" : ""} type="button" onClick={() => setMode("login")}>
+                Log in
+              </button>
+              <button className={mode === "signup" ? "auth-mode-active" : ""} type="button" onClick={() => setMode("signup")}>
+                Sign up
+              </button>
+            </div>
 
-          <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs uppercase tracking-[0.22em] text-slate-500">
-            <span className="h-px bg-white/10" />
-            OAuth
-            <span className="h-px bg-white/10" />
+            <form className="grid gap-3" onSubmit={submit}>
+              {mode === "signup" && (
+                <label className="field-label">
+                  Name
+                  <input className="field-control" type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ned" />
+                </label>
+              )}
+              <label className="field-label">
+                Email
+                <input className="field-control" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
+              </label>
+              <label className="field-label">
+                Password
+                <input className="field-control" minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8+ characters" required />
+              </label>
+
+              {authError && (
+                <div className="rounded-md px-3 py-2 text-sm" style={{ border: "1px solid #ffc9c2", background: "#fff3f1", color: "#9f1c16" }}>
+                  {authError}
+                </div>
+              )}
+
+              <button className="primary-button w-full mt-1" type="submit" disabled={busy}>
+                {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <LogIn size={17} aria-hidden="true" />}
+                {mode === "signup" ? "Create account" : "Log in"}
+              </button>
+            </form>
+
+            <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs uppercase tracking-[0.22em]" style={{ color: "#80868b" }}>
+              <span className="h-px" style={{ background: "#d8e1ee" }} />
+              or
+              <span className="h-px" style={{ background: "#d8e1ee" }} />
+            </div>
+
+            <div className="grid gap-2">
+              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("github")}>
+                <Github size={17} aria-hidden="true" />
+                Continue with GitHub
+              </button>
+              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("google")}>
+                <User size={17} aria-hidden="true" />
+                Continue with Google
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -856,31 +1005,6 @@ function AuthView({
   );
 }
 
-function AuthSignal({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
-      <Icon className="mb-3 text-cyan-200" size={18} aria-hidden="true" />
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function CurrentThemeIndicator({
-  theme,
-  onClick,
-}: {
-  theme: AppTheme;
-  onClick: () => void;
-}) {
-  return (
-    <button className="theme-indicator" type="button" onClick={onClick} aria-label={`Theme: ${theme.label}. Open settings.`}>
-      <span className="theme-indicator-swatch" style={{ background: theme.swatch }} aria-hidden="true" />
-      <span className="theme-indicator-label">{theme.label}</span>
-    </button>
-  );
-}
-
 function ThemePicker({
   themeId,
   onChange,
@@ -888,37 +1012,20 @@ function ThemePicker({
   themeId: string;
   onChange: (id: string) => void;
 }) {
-  const [category, setCategory] = useState<ThemeCategory>("vocaloid");
   const activeTheme = getThemeById(themeId);
-  const visibleThemes = APP_THEMES.filter((theme) => theme.category === category);
 
   return (
     <div className="settings-section">
-      <div className="settings-tabs" role="tablist" aria-label="Theme categories">
-        {THEME_CATEGORIES.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={category === entry.id}
-            className={category === entry.id ? "settings-tab-active" : ""}
-            onClick={() => setCategory(entry.id)}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
-
       <div className="theme-preview-strip">
-        <div className="theme-preview-chip primary-button px-4 py-2 text-sm">Primary</div>
-        <div className="theme-preview-chip glass-panel px-4 py-2 text-sm">Surface</div>
+        <div className="theme-preview-chip primary-button px-4 py-2 text-sm">Button</div>
+        <div className="theme-preview-chip glass-panel px-4 py-2 text-sm">Panel</div>
         <div className="theme-preview-chip rounded-lg px-4 py-2 text-sm" style={{ background: "var(--chart-secondary)", color: "#fff" }}>
           Chart
         </div>
       </div>
 
       <div className="theme-picker-grid" role="listbox" aria-label="App themes">
-        {visibleThemes.map((theme) => (
+        {APP_THEMES.map((theme) => (
           <button
             key={theme.id}
             type="button"
@@ -933,8 +1040,8 @@ function ThemePicker({
         ))}
       </div>
 
-      <p className="mt-3 text-sm text-slate-400">
-        Current theme: <span className="font-semibold text-white">{activeTheme.label}</span>
+      <p className="mt-3 text-sm text-slate-500">
+        Current theme: <span className="font-semibold text-slate-900">{activeTheme.label}</span>
       </p>
     </div>
   );
@@ -947,6 +1054,7 @@ function Sidebar({
   setupStatus,
   user,
   onAdd,
+  onScan,
   onChange,
   onOpenSettings,
 }: {
@@ -956,6 +1064,7 @@ function Sidebar({
   setupStatus: SetupStatus;
   user: AuthUser;
   onAdd: () => void;
+  onScan: () => void;
   onChange: (view: AppView) => void;
   onOpenSettings: () => void;
 }) {
@@ -966,20 +1075,32 @@ function Sidebar({
           <Command size={22} aria-hidden="true" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">Red Bull</p>
-          <p className="truncate text-xs text-cyan-100">Intake telemetry</p>
+          <p className="truncate text-lg font-medium text-slate-950">Red Bull</p>
+          <p className="truncate text-sm text-slate-600">Intake tracker</p>
         </div>
       </div>
 
-      <nav className="grid gap-1" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => (
+      <button className="drawer-primary-action" type="button" onClick={onAdd}>
+        <Plus size={19} aria-hidden="true" />
+        Add intake
+      </button>
+
+      <button className="secondary-button w-full justify-center" type="button" onClick={onScan}>
+        <Camera size={18} aria-hidden="true" />
+        Scan barcode
+      </button>
+
+      <nav className="drawer-nav" aria-label="Main navigation">
+        {NAV_ITEMS.map((item, index) => (
           <button
             key={item.id}
             type="button"
             className={`nav-item ${activeView === item.id ? "nav-item-active" : ""}`}
             onClick={() => onChange(item.id)}
           >
-            <item.icon size={18} aria-hidden="true" />
+            <span className={`nav-icon-dot nav-icon-dot-${index}`} aria-hidden="true">
+              <item.icon size={21} />
+            </span>
             <span>{item.label}</span>
           </button>
         ))}
@@ -987,15 +1108,15 @@ function Sidebar({
 
       <div className="drawer-footer">
         <div className="drawer-info-card">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={15} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={15} aria-hidden="true" />}
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+            {dataLoading ? <Loader2 className="animate-spin" size={15} aria-hidden="true" /> : <Cloud size={15} aria-hidden="true" />}
             Sync
           </div>
-          <p className="text-sm leading-5 text-slate-200">{notice}</p>
-          <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-200" : "text-amber-200"}`}>{setupStatus.message}</p>
+          <p className="text-sm leading-5 text-slate-700">{notice}</p>
+          <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-700" : "text-amber-700"}`}>{setupStatus.message}</p>
         </div>
 
-        <button className="secondary-button w-full justify-center" type="button" onClick={onOpenSettings}>
+        <button className="account-pill" type="button" onClick={onOpenSettings}>
           <User size={16} aria-hidden="true" />
           {user.name || user.email || "Account & settings"}
         </button>
@@ -1027,27 +1148,17 @@ function MobileNav({ activeView, onChange }: { activeView: AppView; onChange: (v
 function TopBar({
   activeTheme,
   activeView,
-  actionLoading,
-  dataLoading,
-  entries,
-  user,
+  busyAction,
   onAdd,
-  onExportExcel,
-  onImportExcel,
-  onOpenSettings,
-  onRefresh,
+  onScan,
+  className = "",
 }: {
   activeTheme: AppTheme;
   activeView: AppView;
-  actionLoading: string | null;
-  dataLoading: boolean;
-  entries: RedBullEntry[];
-  user: AuthUser;
+  busyAction: string | null;
   onAdd: () => void;
-  onExportExcel: () => void;
-  onImportExcel: () => void;
-  onOpenSettings: () => void;
-  onRefresh: () => void;
+  onScan: () => void;
+  className?: string;
 }) {
   const title = NAV_ITEMS.find((item) => item.id === activeView)?.label ?? "Overview";
   const subtitle = new Intl.DateTimeFormat("en-GB", {
@@ -1057,72 +1168,71 @@ function TopBar({
   }).format(new Date());
 
   return (
-    <header className="glass-panel p-4 sm:p-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-cyan-100">
-            <span>{subtitle}</span>
-            <span className="rounded bg-white/10 px-2 py-1 text-xs text-slate-300">{user.email || "Synced user"}</span>
-          </p>
-          <h1 className="mt-1 text-4xl font-semibold tracking-tight text-white sm:text-5xl">{title}</h1>
-        </div>
-
-        <div className="top-meta-row">
-          <span className="account-chip">{user.email || "Synced user"}</span>
-          <CurrentThemeIndicator theme={activeTheme} onClick={onOpenSettings} />
+    <header className={`top-app-bar ${className}`.trim()} data-view={activeView}>
+      <div className="top-app-bar-main">
+        <div className="top-title-cluster">
+          <span className="top-app-icon">
+            <ActiveIcon size={24} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="top-kicker">{subtitle}</p>
+            <h1 className="top-title">{title}</h1>
+          </div>
         </div>
       </div>
 
       <div className="top-action-row">
-        <div className="top-action-primary">
-          <button className="primary-button" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
-            <Plus size={18} aria-hidden="true" />
-            Add Intake
-          </button>
-          <button className="secondary-button" type="button" onClick={onRefresh} disabled={dataLoading}>
-            {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
-            Sync
-          </button>
-          <button className="excel-button" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
-            <FileSpreadsheet size={17} aria-hidden="true" />
-            Export XLSX
-          </button>
-          <button className="excel-button" type="button" onClick={onImportExcel} disabled={Boolean(actionLoading)}>
-            <Upload size={17} aria-hidden="true" />
-            Import XLSX
-          </button>
-        </div>
+        <button
+          className="secondary-button top-action-button justify-center active:scale-95"
+          type="button"
+          onClick={onScan}
+          disabled={Boolean(busyAction)}
+          aria-label="Scan barcode"
+        >
+          <Camera size={18} aria-hidden="true" />
+          <span className="top-action-label">Scan</span>
+        </button>
+        <button
+          className="primary-button top-action-button justify-center active:scale-95"
+          type="button"
+          onClick={onAdd}
+          disabled={Boolean(busyAction)}
+          aria-label="Add intake"
+        >
+          <Plus size={18} aria-hidden="true" />
+          <span className="top-action-label">Add intake</span>
+        </button>
       </div>
     </header>
   );
 }
 
 function StatusRail({
-  actionLoading,
-  dataError,
+  busyAction,
+  syncError,
   setupStatus,
 }: {
-  actionLoading: string | null;
-  dataError: string;
+  busyAction: string | null;
+  syncError: string;
   setupStatus: SetupStatus;
 }) {
-  if (!actionLoading && !dataError && setupStatus.state === "ok") return null;
+  if (!busyAction && !syncError && setupStatus.state === "ok") return null;
   return (
     <div className="mt-3 grid gap-2">
-      {actionLoading && (
-        <div className="status-card border-cyan-300/30 bg-cyan-300/10 text-cyan-50">
+      {busyAction && (
+        <div className="status-card">
           <Loader2 className="animate-spin" size={17} aria-hidden="true" />
-          Working on {actionLabel(actionLoading)}...
+          Working on {actionLabel(busyAction)}...
         </div>
       )}
-      {dataError && (
-        <div className="status-card border-red-400/40 bg-red-500/10 text-red-100">
+      {syncError && (
+        <div className="status-card" style={{ borderColor: "#ffc9c2", background: "#fff3f1", color: "#9f1c16" }}>
           <AlertTriangle size={17} aria-hidden="true" />
-          {dataError}
+          {syncError}
         </div>
       )}
       {setupStatus.state === "error" && (
-        <div className="status-card border-amber-300/40 bg-amber-300/10 text-amber-100">
+        <div className="status-card" style={{ borderColor: "#f9e3b0", background: "#fff8e8", color: "#7a4e00" }}>
           <AlertTriangle size={17} aria-hidden="true" />
           {setupStatus.message}
         </div>
@@ -1132,7 +1242,7 @@ function StatusRail({
 }
 
 function OverviewView({
-  dashboard,
+  summary,
   entries,
   insights,
   quickAdds,
@@ -1140,12 +1250,14 @@ function OverviewView({
   chartData,
   flavourData,
   user,
+  userLimits,
+  limitCheck,
   onQuickAdd,
   onAdd,
-  onOpenCoach,
+  onScan,
   onOpenLogbook,
 }: {
-  dashboard: Dashboard;
+  summary: Dashboard;
   entries: RedBullEntry[];
   insights: Insight[];
   quickAdds: typeof QUICK_ADDS;
@@ -1153,31 +1265,61 @@ function OverviewView({
   chartData: Array<{ label: string; spend: number; cans: number; caffeine: number; sugar: number }>;
   flavourData: Array<{ name: string; value: number; spend: number; accent: string }>;
   user: AuthUser;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
   onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void;
   onAdd: () => void;
-  onOpenCoach: () => void;
+  onScan: () => void;
   onOpenLogbook: () => void;
 }) {
+  const todaySpendRaw = limitCheck.todaySpend;
+  const spendLimitDetail =
+    userLimits.dailySpendLimit != null
+      ? `${currency.format(todaySpendRaw)} of ${currency.format(userLimits.dailySpendLimit)} today`
+      : `${summary.monthSpend} this month`;
+
   return (
     <div className="grid gap-4">
-      <GreetingPanel dashboard={dashboard} entries={entries} user={user} onOpenCoach={onOpenCoach} />
+      <GreetingPanel summary={summary} user={user} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} onScan={onScan} />
 
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <TodayPanel dashboard={dashboard} entries={entries} onAdd={onAdd} />
-        <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
+      <DailyLimitsCard limits={userLimits} check={limitCheck} onOpenSettings={onOpenSettings} />
+
+      <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
+
+      <TodayPanel summary={summary} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} onScan={onScan} />
+
+      {limitCheck.violations.length ? (
+        <section className="limit-alert">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0" size={20} aria-hidden="true" style={{ color: "#b06000" }} />
+            <div>
+              <p className="limit-alert-title">Limit alerts</p>
+              <p className="limit-alert-copy mt-1">
+                {limitStatusMessage(limitCheck.violations, limitCheck, userLimits)}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="overview-metrics-grid grid gap-3">
+        <MetricTile icon={CalendarDays} label="This month" value={summary.monthCans} detail={`${summary.monthSpend} spent`} accent={MATERIAL_ACCENTS.primary} />
+        <MetricTile
+          icon={PoundSterling}
+          label={userLimits.dailySpendLimit != null ? "Today's budget" : "Total spend"}
+          value={userLimits.dailySpendLimit != null ? currency.format(todaySpendRaw) : summary.totalSpend}
+          detail={spendLimitDetail}
+          accent={MATERIAL_ACCENTS.secondary}
+        />
+        <MetricTile icon={Activity} label="Favourite" value={summary.favouriteFlavour} detail="by total cans" accent={MATERIAL_ACCENTS.tertiary} />
+        <MetricTile icon={TimerReset} label="Days without" value={summary.daysWithoutRedBull} detail={`${summary.currentStreak} day streak`} accent={MATERIAL_ACCENTS.error} />
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile icon={CalendarDays} label="This Month" value={dashboard.monthCans} detail={`${dashboard.monthSpend} spent`} accent="#39d5ff" />
-        <MetricTile icon={PoundSterling} label="Total Spend" value={dashboard.totalSpend} detail={`${dashboard.avgWeeklySpend} weekly average`} accent="#ffb7d9" />
-        <MetricTile icon={Activity} label="Favourite" value={dashboard.favouriteFlavour} detail="by total cans" accent="#ffd84d" />
-        <MetricTile icon={TimerReset} label="Days Without" value={dashboard.daysWithoutRedBull} detail={`${dashboard.currentStreak} day streak`} accent="#ff3448" />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <AppCard title="Spend telemetry" subtitle="Last 30 logged days">
+      <section className="overview-charts-grid grid gap-4">
+        <AppCard title="Spend overview" subtitle="Last 30 logged days">
           {chartData.length ? (
-            <ResponsiveContainer width="100%" height={280}>
+            <div className="chart-shell chart-shell--area">
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 12, right: 12, bottom: 0, left: -18 }}>
                 <defs>
                   <linearGradient id="mikuSpend" x1="0" x2="0" y1="0" y2="1">
@@ -1192,6 +1334,7 @@ function OverviewView({
                 <Area type="monotone" dataKey="spend" name="Spend" stroke="#39d5ff" fill="url(#mikuSpend)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <EmptyState title="No spend data yet" copy="Add an intake or use quick add to start the chart." actionLabel="Add intake" onAction={onAdd} />
           )}
@@ -1214,16 +1357,17 @@ function OverviewView({
         </AppCard>
       </section>
 
-      <section className="grid gap-3 lg:grid-cols-3">
+      <section className="overview-insights-grid grid gap-3">
         {insights.map((insight) => (
           <InsightCard key={insight.label} insight={insight} />
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <section className="grid gap-4">
         <AppCard title="Flavour mix" subtitle="Cans by flavour">
           {flavourData.length ? (
-            <ResponsiveContainer width="100%" height={260}>
+            <div className="chart-shell chart-shell--pie">
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={flavourData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={104} paddingAngle={4} stroke="#080d1f" strokeWidth={4}>
                   {flavourData.map((entry) => (
@@ -1233,82 +1377,89 @@ function OverviewView({
                 <Tooltip content={<ChartTooltip />} />
               </PieChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <EmptyState title="No flavours yet" copy="Flavour breakdown appears after your first entry." />
           )}
         </AppCard>
-
-        <DisclaimerCard />
       </section>
     </div>
   );
 }
 
 function GreetingPanel({
-  dashboard,
-  entries,
+  summary,
   user,
-  onOpenCoach,
+  userLimits,
+  limitCheck,
+  onAdd,
+  onScan,
 }: {
-  dashboard: Dashboard;
-  entries: RedBullEntry[];
+  summary: Dashboard;
   user: AuthUser;
-  onOpenCoach: () => void;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
+  onAdd: () => void;
+  onScan: () => void;
 }) {
-  const todayNumber = Number.parseFloat(dashboard.todayCans) || 0;
-  const progress = Math.min(100, Math.round((todayNumber / 4) * 100));
+  const todayNumber = Number.parseFloat(summary.todayCans) || 0;
+  const canLimit = userLimits.dailyCanLimit;
   const name = firstName(user);
-  const favourite = dashboard.favouriteFlavour === "None yet" ? "still forming" : dashboard.favouriteFlavour;
-  const redBullLabel = todayNumber === 1 ? "Red Bull" : "Red Bulls";
+  const greeting = buildDynamicGreeting({
+    name,
+    todayCans: todayNumber,
+    favouriteFlavour: summary.favouriteFlavour,
+    currentStreak: Number.parseInt(summary.currentStreak, 10) || 0,
+    todayCaffeineMg: Number.parseFloat(summary.todayCaffeine.replace(/[^\d.]/g, "")) || 0,
+    allTimeCans: Number.parseFloat(summary.allTimeCans) || 0,
+    dailyCanLimit: canLimit,
+    limitCheck,
+  });
 
   return (
-    <section className="oura-hero glass-panel p-5 sm:p-6">
-      <div className="grid gap-5 xl:grid-cols-[auto_1fr_auto] xl:items-center">
-        <div className="oura-ring" style={{ "--progress": `${progress}%` } as CSSProperties} aria-label={`${progress}% of daily guide`}>
-          <div>
-            <span>{dashboard.todayCans}</span>
-            <small>today</small>
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-400">
-            <Sparkles size={14} aria-hidden="true" />
-            Daily readiness
-          </div>
-          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Hey {name}, you've had {dashboard.todayCans} {redBullLabel} today and your favourite flavour is {favourite}.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-            Clean caffeine, sugar, spend, and streak signals in one glance.
-          </p>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[390px] xl:grid-cols-1">
-          <WellnessPill label="Caffeine" value={dashboard.todayCaffeine} />
-          <WellnessPill label="Sugar" value={dashboard.todaySugar} />
-          <WellnessPill label="Entries" value={`${entries.length}`} />
-        </div>
+    <section className="home-hero">
+      <div className="hero-icon-row" aria-hidden="true">
+        <span><Zap size={22} /></span>
+        <span><PoundSterling size={22} /></span>
+        <span><CalendarDays size={22} /></span>
+        <span><Activity size={22} /></span>
       </div>
 
-      <div className="mt-5 grid gap-2 md:grid-cols-3">
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Ask Coach for today's pace
+      <div className="hero-avatar">{userInitial(user)}</div>
+      <p className="hero-kicker">{greeting.badge}</p>
+      <h2 className="hero-name">{name}</h2>
+      <p className="hero-copy">{greeting.subline}</p>
+
+      <div className="hero-action-row">
+        <button className="hero-search-button" type="button" onClick={onAdd}>
+          <Plus size={22} aria-hidden="true" />
+          Add intake
         </button>
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Get a sugar-free swap idea
+        <button className="hero-scan-button secondary-button" type="button" onClick={onScan}>
+          <Camera size={22} aria-hidden="true" />
+          Scan barcode
         </button>
-        <button className="suggestion-chip" type="button" onClick={onOpenCoach}>
-          Review weekly spend trend
-        </button>
+      </div>
+
+      <div className="hero-stat-row">
+        <WellnessPill label="Today" value={`${summary.todayCans} cans`} />
+        <WellnessPill label="Caffeine" value={summary.todayCaffeine} />
+        <WellnessPill label="Sugar" value={summary.todaySugar} />
+        <WellnessPill label="Streak" value={`${summary.currentStreak} days`} />
       </div>
     </section>
   );
 }
 
+function statHint(label: string) {
+  return label === "Caffeine" || label === "Sugar"
+    ? "estimated from the logged can. check the label if it matters."
+    : undefined;
+}
+
 function WellnessPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="wellness-pill">
+    <div className="wellness-pill" title={statHint(label)}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -1316,35 +1467,42 @@ function WellnessPill({ label, value }: { label: string; value: string }) {
 }
 
 function TodayPanel({
-  dashboard,
+  summary,
   entries,
   onAdd,
+  onScan,
 }: {
-  dashboard: Dashboard;
+  summary: Dashboard;
   entries: RedBullEntry[];
   onAdd: () => void;
+  onScan: () => void;
 }) {
   return (
     <section className="can-panel today-panel relative overflow-hidden p-5 sm:p-7">
-      <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Today</p>
+      <p className="section-kicker">Today</p>
       <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-7xl font-semibold tracking-tight text-white sm:text-8xl">{dashboard.todayCans}</p>
-          <p className="mt-2 text-lg text-slate-300">cans logged</p>
+          <p className="today-stat-value">{summary.todayCans}</p>
+          <p className="today-stat-label mt-2">cans logged</p>
+          {limitSummary ? <p className="today-limit-summary mt-2">{limitSummary}</p> : null}
         </div>
-        <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-          <MiniMetric label="Caffeine" value={dashboard.todayCaffeine} accent="#39d5ff" />
-          <MiniMetric label="Sugar" value={dashboard.todaySugar} accent="#ffb7d9" />
-          <MiniMetric label="Streak" value={dashboard.currentStreak} accent="#ffd84d" />
+        <div className="today-panel-metrics lg:min-w-[420px]">
+          <MiniMetric label="Caffeine" value={summary.todayCaffeine} accent={MATERIAL_ACCENTS.primary} />
+          <MiniMetric label="Sugar" value={summary.todaySugar} accent={MATERIAL_ACCENTS.secondary} />
+          <MiniMetric label="Streak" value={summary.currentStreak} accent={MATERIAL_ACCENTS.tertiary} />
         </div>
       </div>
-      <div className="mt-6 flex flex-wrap items-center gap-2">
+      <div className="today-action-row mt-6 flex flex-wrap items-center gap-2">
         <button className="primary-button" type="button" onClick={onAdd}>
           <Plus size={18} aria-hidden="true" />
           Add intake
         </button>
-        <span className="rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-300">
-          {entries.length ? `${dashboard.allTimeCans} all-time cans` : "Ready for your first entry"}
+        <button className="secondary-button" type="button" onClick={onScan}>
+          <Camera size={18} aria-hidden="true" />
+          Scan barcode
+        </button>
+        <span className="entry-chip px-3 py-2 text-sm">
+          {entries.length ? `${summary.allTimeCans} all-time cans` : "Ready for your first entry"}
         </span>
       </div>
     </section>
@@ -1354,26 +1512,21 @@ function TodayPanel({
 function QuickAddPanel({ items, onQuickAdd }: { items: typeof QUICK_ADDS; onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void }) {
   return (
     <AppCard title="Quick add" subtitle="One tap entries">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+      <div className="quick-add-grid grid gap-2">
         {items.map((item) => {
           const meta = flavourMeta(item.flavour);
           return (
-            <button
-              key={item.label}
-              className="group grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3 text-left transition hover:border-cyan-300/40 hover:bg-white/[0.10]"
-              type="button"
-              onClick={() => onQuickAdd(item)}
-            >
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-300/10 text-cyan-100 shadow-sm">
+            <button key={item.label} className="quick-add-button" type="button" onClick={() => onQuickAdd(item)}>
+              <span className="quick-add-icon">
                 <Zap size={17} aria-hidden="true" />
               </span>
               <span>
-                <span className="block font-semibold text-white">{item.label}</span>
-                <span className="text-sm text-slate-400">
+                <span className="block font-medium">{item.label}</span>
+                <span className="quick-add-meta">
                   {item.sizeMl}ml · {item.flavour}
                 </span>
               </span>
-              <span className="text-sm font-semibold" style={{ color: meta.accent }}>
+              <span className="text-sm font-medium" style={{ color: meta.accent }}>
                 {currency.format(item.pricePerCan)}
               </span>
             </button>
@@ -1404,7 +1557,7 @@ function LogbookView({
   onDelete: (id: string) => void;
 }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
+    <section className="logbook-layout grid gap-4">
       <FiltersPanel filters={filters} flavours={flavours} onChange={onFilterChange} />
       <EntryLedger entries={entries} totalEntries={totalEntries} onAdd={onAdd} onEdit={onEdit} onDelete={onDelete} />
     </section>
@@ -1432,7 +1585,7 @@ function TrendsView({
 }) {
   return (
     <div className="grid gap-4">
-      <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <section className="logbook-layout grid gap-4">
         <FiltersPanel filters={filters} flavours={flavours} onChange={onFilterChange} compact />
         <AppCard title="Cans and spend" subtitle={`${entries.length} entries in view`}>
           {chartData.length ? (
@@ -1521,6 +1674,14 @@ function TrendsView({
           ))}
         </div>
       </section>
+
+      <section className="grid gap-4">
+        <SpendForecastCard
+          entries={entries}
+          userLimits={userLimits}
+          onSaveLimits={onSaveLimits}
+        />
+      </section>
     </div>
   );
 }
@@ -1542,20 +1703,31 @@ function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries
   const messages = useMemo(() => activeChat?.messages ?? [], [activeChat]);
   const visibleMessages = useMemo(() => messages.filter((message) => message.id !== "coach-welcome"), [messages]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [activeChatId, messages]);
+function SpendForecastCard({
+  entries,
+  userLimits,
+  onSaveLimits,
+}: {
+  entries: RedBullEntry[];
+  userLimits: UserLimits;
+  onSaveLimits?: (limits: UserLimits) => void;
+}) {
+  const [projectionDays, setProjectionDays] = useState<7 | 30 | 90 | 365>(30);
+  const now = useMemo(() => new Date(), []);
 
-  const quickPrompts = [
-    "what does my red bull pattern say about today?",
-    "give me one lower-sugar swap based on my favourite flavour.",
-    "how should i pace caffeine for the rest of the day?",
-  ];
+  const firstEntryDate = useMemo(() => {
+    if (!entries.length) return now;
+    return new Date(
+      [...entries].sort(
+        (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+      )[0].dateTime
+    );
+  }, [entries, now]);
 
-  async function unlockChats(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const passphrase = chatKeyInput.trim();
-    if (!passphrase) return;
+  const trackingDays = useMemo(() => {
+    const diffTime = Math.abs(now.getTime() - firstEntryDate.getTime());
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }, [firstEntryDate, now]);
 
     setBusy(true);
     setError("");
@@ -1612,297 +1784,153 @@ function CoachView({ dashboard, entries, user }: { dashboard: Dashboard; entries
       messages: [...conversation, assistantMessage],
       updatedAt: now,
     };
+  }, [entries, activePeriodDays, now]);
 
-    upsertChatState(draftChat);
-    setActiveChatId(draftChat.id);
-    setInput("");
-    setBusy(true);
-    setError("");
-
-    let streamedContent = "";
-    let streamedThinking = "";
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-
-    try {
-      const requestMessages: Array<{ role: string; content: string; thinking?: string }> = [
-        { role: "system", content: buildCoachSystemPrompt(user, dashboard, entries) },
-        ...conversation
-          .filter((message) => message.content.trim().length > 0)
-          .map((message) => ({
-            role: message.role,
-            content: message.content,
-            ...(message.thinking ? { thinking: message.thinking } : {}),
-          })),
-      ];
-
-      const response = await fetch(OLLAMA_PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          messages: requestMessages,
-          stream: true,
-          think: true,
-        }),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `Ollama request failed with status ${response.status}.`);
-      }
-      if (!response.body) {
-        throw new Error("Streaming response was empty.");
+  const projectionData = useMemo<ForecastPoint[]>(() => {
+    return Array.from({ length: projectionDays }).map((_, index) => {
+      const day = index + 1;
+      const dataPoint: ForecastPoint = {
+        label: `day ${day}`,
+        current: Number((day * stats.avgDailySpend).toFixed(2)),
+        lower: Number((day * stats.avgDailySpend * 0.8).toFixed(2)),
+      };
+      if (userLimits.dailySpendLimit != null) {
+        dataPoint.limit = Number((day * userLimits.dailySpendLimit).toFixed(2));
       }
 
-      await readOllamaStream(response.body, (chunk) => {
-        if (chunk.error) throw new Error(chunk.error);
-        if (chunk.message?.thinking) streamedThinking += chunk.message.thinking;
-        if (chunk.message?.content) streamedContent += chunk.message.content.toLocaleLowerCase();
-
-        patchAssistantMessage(draftChat.id, assistantId, {
-          content: streamedContent,
-          thinking: streamedThinking,
-          pending: true,
-        });
-      });
-
-      const finalChat = withAssistantMessage(draftChat, assistantId, {
-        content: streamedContent || "no answer returned.",
-        thinking: streamedThinking,
-        pending: false,
-      });
-      upsertChatState(finalChat);
-      await persistChat(finalChat);
-    } catch (caught) {
-      const aborted = abortController.signal.aborted;
-      const message = caught instanceof Error ? caught.message : "Coach request failed.";
-      const finalChat = withAssistantMessage(draftChat, assistantId, {
-        content: aborted ? streamedContent || "stopped thinking." : `coach unavailable: ${message}`.toLocaleLowerCase(),
-        thinking: streamedThinking,
-        pending: false,
-        stopped: aborted,
-      });
-      upsertChatState(finalChat);
-      await persistChat(finalChat);
-      if (!aborted) setError(message);
-    } finally {
-      abortRef.current = null;
-      setBusy(false);
-    }
-  }
-
-  function stopThinking() {
-    abortRef.current?.abort();
-  }
-
-  function toggleThinking(id: string) {
-    setOpenThinkingIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
-  }
-
-  function upsertChatState(chat: CoachChat) {
-    setChats((current) => {
-      const exists = current.some((item) => item.id === chat.id);
-      return exists ? current.map((item) => (item.id === chat.id ? chat : item)) : [chat, ...current];
-    });
-  }
-
-  function patchAssistantMessage(chatId: string, messageId: string, patch: Partial<CoachMessage>) {
-    setChats((current) =>
-      current.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              updatedAt: new Date().toISOString(),
-              messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
-            }
-          : chat,
-      ),
-    );
-  }
-
-  function withAssistantMessage(chat: CoachChat, messageId: string, patch: Partial<CoachMessage>): CoachChat {
-    return {
-      ...chat,
-      updatedAt: new Date().toISOString(),
-      messages: chat.messages.map((message) => (message.id === messageId ? { ...message, ...patch } : message)),
-    };
-  }
-
-  async function persistChat(chat: CoachChat) {
-    if (!chatKey) return;
-    try {
-      const saved = savedChatIds.has(chat.id)
-        ? await updateEncryptedChat(user.$id, chatKey, chat)
-        : await createEncryptedChat(user.$id, chatKey, chat);
-      setSavedChatIds((current) => new Set(current).add(saved.id));
-      upsertChatState(saved);
-      setChatStorageStatus("encrypted chat saved to appwrite");
-    } catch (caught) {
-      setChatStorageStatus("encrypted chat save failed");
-      setError(chatStorageErrorMessage(caught));
-    }
-  }
-
-  async function removeChat(chatId: string) {
-    if (busy) return;
-    try {
-      if (savedChatIds.has(chatId)) await deleteEncryptedChat(chatId);
-      setSavedChatIds((current) => {
-        const next = new Set(current);
-        next.delete(chatId);
-        return next;
-      });
-      setChats((current) => {
-        const next = current.filter((chat) => chat.id !== chatId);
-        const fallback = buildNewCoachChat(user);
-        setActiveChatId(next[0]?.id ?? fallback.id);
-        return next.length ? next : [fallback];
-      });
-      setChatStorageStatus("encrypted chat deleted");
-    } catch (caught) {
-      setError(chatStorageErrorMessage(caught));
-    }
-  }
-
-  if (!chatKey) {
+  if (!stats.hasData) {
     return (
-      <section className="coach-gemini-shell coach-locked-shell">
-        <div className="coach-empty-state">
-          <div className="coach-brand-orb">
-            <Lock size={30} aria-hidden="true" />
-          </div>
-          <h2>unlock encrypted coach chats</h2>
-          <p>
-            messages encrypt in this browser before appwrite stores them. the passphrase is never saved, so use the same one on every device.
-          </p>
-          <form className="coach-unlock-card" onSubmit={unlockChats}>
-            <input
-              className="coach-input"
-              type="password"
-              value={chatKeyInput}
-              onChange={(event) => setChatKeyInput(event.target.value)}
-              placeholder="encryption passphrase"
-              autoComplete="current-password"
-            />
-            <button className="primary-button" type="submit" disabled={busy || !chatKeyInput.trim()}>
-              {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <Lock size={17} aria-hidden="true" />}
-              unlock
-            </button>
-          </form>
-          {error && <p className="mt-4 max-w-xl text-sm text-red-100">{error}</p>}
-        </div>
-      </section>
+      <AppCard title="Spend forecast" subtitle="Based on past spending">
+        <EmptyState title="No spend forecast yet" copy="Add an intake first." />
+      </AppCard>
     );
   }
+
+  const projectedSpend = stats.avgDailySpend * projectionDays;
+  const projectedCans = stats.avgDailyCans * projectionDays;
+  const lowerSpend = projectedSpend * 0.8;
+  const possibleSavings = projectedSpend - lowerSpend;
+
+  const saveLowerLimit = () => {
+    if (!onSaveLimits) return;
+    const lowerDailyLimit = Math.round(stats.avgDailySpend * 0.8 * 100) / 100;
+    onSaveLimits({
+      ...userLimits,
+      dailySpendLimit: lowerDailyLimit,
+    });
+  };
 
   return (
-    <section className="coach-gemini-shell">
-      <aside className="coach-chat-sidebar">
-        <div className="coach-sidebar-brand">
-          <div className="coach-brand-orb coach-brand-orb-small">
-            <Brain size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <p className="font-semibold text-white">coach</p>
-            <p className="text-xs text-slate-400">{chatStorageStatus}</p>
+    <AppCard
+      title="Spend forecast"
+      subtitle={`${activePeriodDays} day average: ${currency.format(stats.avgDailySpend)} per day`}
+    >
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "#d8e1ee" }}>
+          <p className="app-card-subtitle">Forecast window</p>
+          <div className="segmented-control max-w-xs self-start" role="tablist">
+            {([7, 30, 90, 365] as const).map((days) => (
+              <button
+                key={days}
+                type="button"
+                role="tab"
+                aria-selected={projectionDays === days}
+                onClick={() => setProjectionDays(days)}
+                className={projectionDays === days ? "segmented-control-active" : ""}
+              >
+                {days === 365 ? "1 year" : `${days} days`}
+              </button>
+            ))}
           </div>
         </div>
 
-        <button className="coach-new-chat" type="button" onClick={startNewChat} disabled={busy}>
-          <MessageSquarePlus size={18} aria-hidden="true" />
-          new chat
-        </button>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="forecast-stat space-y-1">
+            <span className="forecast-stat-label">Projected spend</span>
+            <p className="forecast-stat-value">{currency.format(projectedSpend)}</p>
+            <span className="forecast-stat-note">
+              ~{oneDecimal.format(projectedCans)} cans logged
+            </span>
+          </div>
 
-        <div className="coach-chat-list">
-          {chats.map((chat) => (
-            <div key={chat.id} className={`coach-chat-row ${chat.id === activeChatId ? "coach-chat-row-active" : ""}`}>
-              <button type="button" onClick={() => setActiveChatId(chat.id)}>
-                <span>{chat.title}</span>
-                <small>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(chat.updatedAt))}</small>
-              </button>
-              <button type="button" aria-label={`delete ${chat.title}`} onClick={() => void removeChat(chat.id)} disabled={busy}>
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
+          <div className="forecast-stat forecast-stat--positive space-y-1">
+            <span className="forecast-stat-label">20 percent lower</span>
+            <p className="forecast-stat-value">{currency.format(lowerSpend)}</p>
+            <span className="forecast-stat-note">
+              ~{oneDecimal.format(projectedCans * 0.8)} cans logged
+            </span>
+          </div>
+
+          <div className="forecast-stat forecast-stat--positive flex flex-col justify-between space-y-1">
+            <div>
+              <span className="forecast-stat-label">Possible savings</span>
+              <p className="forecast-stat-value">{currency.format(possibleSavings)}</p>
             </div>
-          ))}
-        </div>
-
-        <div className="coach-context-card">
-          <p className="text-xs font-semibold uppercase text-slate-500">today</p>
-          <div className="mt-3 grid gap-2">
-            <WellnessPill label="cans" value={dashboard.todayCans} />
-            <WellnessPill label="caffeine" value={dashboard.todayCaffeine} />
-            <WellnessPill label="favourite" value={dashboard.favouriteFlavour} />
+            {onSaveLimits && (
+              <button
+                type="button"
+                onClick={saveLowerLimit}
+                className="forecast-stat-note mt-1 block text-left underline"
+                style={{ color: "#0d652d" }}
+              >
+                Lock daily limit to {currency.format(stats.avgDailySpend * 0.8)}/day
+              </button>
+            )}
           </div>
         </div>
       </aside>
 
-      <section className="coach-stage">
-        <div className="coach-stage-topbar">
-          <span>{OLLAMA_MODEL}</span>
-          <span>{busy ? "thinking" : "ready"}</span>
-        </div>
-
-        <div className="coach-stage-messages" aria-live="polite">
-          {!visibleMessages.length ? (
-            <div className="coach-empty-state">
-              <div className="coach-brand-orb">
-                <Sparkles size={32} aria-hidden="true" />
-              </div>
-              <h2>ready when you are</h2>
-              <p>ask about caffeine pace, sugar, spend, or your flavour pattern. answers stay lower case.</p>
-              <div className="coach-prompt-grid">
-                {quickPrompts.map((prompt) => (
-                  <button key={prompt} className="suggestion-chip" type="button" disabled={busy} onClick={() => void sendPrompt(prompt)}>
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            visibleMessages.map((message) => (
-              <CoachMessageBubble
-                key={message.id}
-                message={message}
-                thinkingOpen={openThinkingIds.includes(message.id)}
-                onToggleThinking={() => toggleThinking(message.id)}
+        <div className="forecast-chart-wrap relative">
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={projectionData} margin={{ top: 12, right: 16, bottom: 0, left: -10 }}>
+              <defs>
+                <linearGradient id="currentProj" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="optimalProj" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--subtle)" tickLine={false} axisLine={false} />
+              <YAxis stroke="var(--subtle)" tickLine={false} axisLine={false} tickFormatter={(val) => `£${val}`} />
+              <Tooltip content={<ChartTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="current"
+                name="current"
+                stroke="var(--primary)"
+                fill="url(#currentProj)"
+                strokeWidth={3}
               />
-            ))
-          )}
-          <div ref={messagesEndRef} />
+              <Area
+                type="monotone"
+                dataKey="lower"
+                name="20 percent lower"
+                stroke="#10b981"
+                fill="url(#optimalProj)"
+                strokeWidth={3}
+                strokeDasharray="4 4"
+              />
+              {userLimits.dailySpendLimit != null && (
+                <Line
+                  type="monotone"
+                  dataKey="limit"
+                  name="daily limit"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  dot={false}
+                  strokeDasharray="6 6"
+                />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
-        {error && (
-          <div className="mx-4 mb-3 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-            {error}
-          </div>
-        )}
-
-        <form className="coach-composer" onSubmit={submit}>
-          <button className="composer-icon-button" type="button" onClick={startNewChat} disabled={busy} aria-label="new chat">
-            <Plus size={22} aria-hidden="true" />
-          </button>
-          <input
-            className="coach-input"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="ask coach"
-            disabled={busy}
-          />
-          {busy ? (
-            <button className="composer-send-button composer-stop-button" type="button" onClick={stopThinking} aria-label="stop thinking">
-              <Square size={18} aria-hidden="true" />
-            </button>
-          ) : (
-            <button className="composer-send-button" type="submit" disabled={!input.trim()} aria-label="send coach message">
-              <Send size={20} aria-hidden="true" />
-            </button>
-          )}
-        </form>
-      </section>
-    </section>
+      </div>
+    </AppCard>
   );
 }
 
@@ -1955,14 +1983,16 @@ function CoachMessageBubble({
 
 function SettingsView({
   activeTheme,
-  dashboard,
+  summary,
   dataLoading,
   entries,
   notice,
   setupStatus,
   themeId,
   user,
-  actionLoading,
+  userLimits,
+  limitCheck,
+  busyAction,
   onExportExcel,
   onImportExcel,
   onExportJson,
@@ -1972,14 +2002,16 @@ function SettingsView({
   onThemeChange,
 }: {
   activeTheme: AppTheme;
-  dashboard: Dashboard;
+  summary: Dashboard;
   dataLoading: boolean;
   entries: RedBullEntry[];
   notice: string;
   setupStatus: SetupStatus;
   themeId: string;
-  user: AuthUser;
-  actionLoading: string | null;
+  user: AuthUser | null;
+  userLimits: UserLimits;
+  limitCheck: LimitCheckResult;
+  busyAction: string | null;
   onExportExcel: () => void;
   onImportExcel: () => void;
   onExportJson: () => void;
@@ -1989,20 +2021,23 @@ function SettingsView({
   onThemeChange: (id: string) => void;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
+    <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
       <div className="grid gap-4">
-        <AppCard title="Account" subtitle="Your Appwrite profile and sync status">
-          <div className="rounded-lg border border-white/10 bg-white/[0.05] p-4">
-            <p className="text-lg font-semibold text-white">{user.name || "Appwrite user"}</p>
-            <p className="mt-1 text-sm text-slate-400">{user.email}</p>
-            <div className="mt-4 flex items-center gap-2 text-sm text-slate-300">
-              {dataLoading ? <Loader2 className="animate-spin text-cyan-200" size={16} aria-hidden="true" /> : <Cloud className="text-cyan-200" size={16} aria-hidden="true" />}
-              {notice}
-            </div>
-            <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-200" : "text-amber-200"}`}>{setupStatus.message}</p>
-            <button className="secondary-button mt-4 justify-center" type="button" onClick={onLogout}>
-              <LogOut size={17} aria-hidden="true" />
-              Log out
+        <AppCard title="Daily limits" subtitle="Personal caps for cans, spend, and stop time (BST)">
+          <LimitsSettingsForm
+            limits={userLimits}
+            check={limitCheck}
+            saving={busyAction === "save-limits"}
+            onSave={onSaveLimits}
+          />
+          <div className="mt-4 border-t border-white/5 pt-4 flex justify-end">
+            <button
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 text-xs font-bold text-slate-300 hover:bg-white/10 transition active:scale-95"
+              type="button"
+              onClick={onRerunOnboarding}
+            >
+              <Sparkles size={14} className="text-cyan-400" />
+              Run setup again
             </button>
           </div>
         </AppCard>
@@ -2013,25 +2048,29 @@ function SettingsView({
 
         <AppCard title="Data & sync" subtitle={`${entries.length} entries synced for this user`}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <MiniMetric label="All-time cans" value={dashboard.allTimeCans} accent={MATERIAL_ACCENTS.primary} />
-            <MiniMetric label="Total spend" value={dashboard.totalSpend} accent={MATERIAL_ACCENTS.tertiary} />
-            <MiniMetric label="Favourite" value={dashboard.favouriteFlavour} accent={MATERIAL_ACCENTS.secondary} />
+            <MiniMetric label="All-time cans" value={summary.allTimeCans} accent={MATERIAL_ACCENTS.primary} />
+            <MiniMetric label="Total spend" value={summary.totalSpend} accent={MATERIAL_ACCENTS.tertiary} />
+            <MiniMetric label="Favourite" value={summary.favouriteFlavour} accent={MATERIAL_ACCENTS.secondary} />
           </div>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <button className="excel-button justify-center" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(actionLoading)}>
+            <button className="secondary-button justify-center" type="button" onClick={() => window.location.reload()} disabled={dataLoading}>
+              {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
+              Sync now
+            </button>
+            <button className="excel-button justify-center" type="button" onClick={onExportExcel} disabled={!entries.length || Boolean(busyAction)}>
               <FileSpreadsheet size={17} aria-hidden="true" />
               Export XLSX
             </button>
-            <button className="excel-button justify-center" type="button" onClick={onImportExcel} disabled={Boolean(actionLoading)}>
+            <button className="excel-button justify-center" type="button" onClick={onImportExcel} disabled={Boolean(busyAction)}>
               <Upload size={17} aria-hidden="true" />
               Import XLSX
             </button>
-            <button className="secondary-button justify-center" type="button" onClick={onExportJson} disabled={!entries.length || Boolean(actionLoading)}>
+            <button className="secondary-button justify-center" type="button" onClick={onExportJson} disabled={!entries.length || Boolean(busyAction)}>
               <FileJson size={17} aria-hidden="true" />
               Export JSON
             </button>
-            <button className="secondary-button justify-center" type="button" onClick={onImportJson} disabled={Boolean(actionLoading)}>
+            <button className="secondary-button justify-center" type="button" onClick={onImportJson} disabled={Boolean(busyAction)}>
               <Upload size={17} aria-hidden="true" />
               Import JSON
             </button>
@@ -2044,11 +2083,10 @@ function SettingsView({
               <DataPair label="Project" value={appwriteConfig.projectId} />
               <DataPair label="Database" value={appwriteConfig.databaseId} />
               <DataPair label="Collection" value={appwriteConfig.collectionId} />
-              <DataPair label="Chats" value={appwriteConfig.chatCollectionId} />
             </dl>
           </div>
 
-          <button className="danger-button mt-5 justify-center" type="button" onClick={onReset} disabled={!entries.length || Boolean(actionLoading)}>
+          <button className="danger-button mt-5 justify-center" type="button" onClick={onReset} disabled={!entries.length || Boolean(busyAction)}>
             <RotateCcw size={17} aria-hidden="true" />
             Delete all entries
           </button>
@@ -2056,21 +2094,26 @@ function SettingsView({
       </div>
 
       <div className="grid gap-4">
-        <AppCard title="Excel theme" subtitle="Pastel pink and Miku blue workbook">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-cyan-200/30 bg-cyan-200/10 p-4">
-              <FileSpreadsheet className="text-cyan-100" size={24} aria-hidden="true" />
-              <p className="mt-3 text-sm font-semibold text-white">Entries sheet</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">Frozen headers, total row, auto-width columns.</p>
-            </div>
-            <div className="rounded-lg border border-pink-200/30 bg-pink-200/10 p-4">
-              <Gauge className="text-pink-100" size={24} aria-hidden="true" />
-              <p className="mt-3 text-sm font-semibold text-white">Summary sheet</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">Spend, caffeine, sugar, flavour totals.</p>
+        <AppCard title="Account" subtitle="Signed in with Appwrite">
+          <div className="account-card">
+            <div className="account-avatar">{userInitial(user)}</div>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-medium text-slate-950">{user?.name || "Appwrite user"}</p>
+              <p className="truncate text-sm text-slate-500">{user?.email}</p>
             </div>
           </div>
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.05] p-4">
+            <div className="flex items-center gap-2 text-sm text-slate-700">
+              {dataLoading ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <Cloud size={16} aria-hidden="true" />}
+              {notice}
+            </div>
+            <p className={`mt-2 text-xs ${setupStatus.state === "ok" ? "text-emerald-700" : "text-amber-700"}`}>{setupStatus.message}</p>
+          </div>
+          <button className="secondary-button mt-4 justify-center" type="button" onClick={onLogout}>
+            <LogOut size={17} aria-hidden="true" />
+            Log out
+          </button>
         </AppCard>
-        <DisclaimerCard />
       </div>
     </div>
   );
@@ -2080,7 +2123,7 @@ function DataPair({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[110px_1fr]">
       <dt className="text-slate-500">{label}</dt>
-      <dd className="truncate font-mono text-xs text-cyan-100">{value}</dd>
+      <dd className="truncate font-mono text-xs" style={{ color: "#174ea6" }}>{value}</dd>
     </div>
   );
 }
@@ -2100,30 +2143,30 @@ function MetricTile({
 }) {
   return (
     <motion.article
-      className="glass-panel p-4"
+      className="glass-panel metric-tile"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22 }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-400">{label}</p>
-          <p className="mt-3 break-words text-3xl font-semibold tracking-tight text-white">{value}</p>
+          <p className="metric-tile-label">{label}</p>
+          <p className="metric-tile-value break-words">{value}</p>
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/10" style={{ color: accent }}>
+        <div className="metric-tile-icon" style={{ color: accent }}>
           <Icon size={20} aria-hidden="true" />
         </div>
       </div>
-      <p className="mt-4 text-sm text-slate-400">{detail}</p>
+      <p className="metric-tile-detail mt-4">{detail}</p>
     </motion.article>
   );
 }
 
 function MiniMetric({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
-      <p className="text-xs font-medium text-slate-400">{label}</p>
-      <p className="mt-2 truncate text-xl font-semibold tracking-tight text-white" style={{ color: accent }}>
+    <div className="mini-metric-card metric-soft" title={statHint(label)}>
+      <p className="mini-metric-label">{label}</p>
+      <p className="mini-metric-value truncate" style={{ color: accent }}>
         {value}
       </p>
     </div>
@@ -2133,12 +2176,12 @@ function MiniMetric({ label, value, accent }: { label: string; value: string; ac
 function InsightCard({ insight }: { insight: Insight }) {
   return (
     <article className="glass-panel p-4">
-      <div className="mb-3 flex items-center gap-2 text-cyan-100">
+      <div className="mb-3 flex items-center gap-2" style={{ color: "var(--primary, #2563c7)" }}>
         <Gauge size={17} aria-hidden="true" />
-        <p className="text-sm font-medium">{insight.label}</p>
+        <p className="insight-card-label">{insight.label}</p>
       </div>
-      <p className="text-lg font-semibold text-white">{insight.value}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-400">{insight.detail}</p>
+      <p className="insight-card-value text-lg">{insight.value}</p>
+      <p className="insight-card-detail mt-2">{insight.detail}</p>
     </article>
   );
 }
@@ -2153,10 +2196,10 @@ function AppCard({
   children: ReactNode;
 }) {
   return (
-    <section className="glass-panel p-4 sm:p-5">
+    <section className="app-card p-4 sm:p-5">
       <div className="mb-4">
-        <h2 className="text-xl font-semibold tracking-tight text-white">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
+        <h2 className="app-card-title text-xl">{title}</h2>
+        {subtitle && <p className="app-card-subtitle mt-1">{subtitle}</p>}
       </div>
       {children}
     </section>
@@ -2174,10 +2217,10 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-white/10 bg-[#080d1f]/95 px-3 py-2 shadow-fridge backdrop-blur-xl">
-      <p className="mb-1 text-sm font-semibold text-white">{label}</p>
+    <div className="chart-tooltip">
+      <p className="mb-1 text-sm font-medium" style={{ color: "#202124" }}>{label}</p>
       {payload.map((item) => (
-        <p key={item.name} className="text-sm text-slate-300">
+        <p key={item.name} className="text-sm" style={{ color: "#5f6670" }}>
           <span style={{ color: item.color }}>{item.name}</span>: {formatMetricValue(item.name, item.value)}
         </p>
       ))}
@@ -2197,12 +2240,12 @@ function EmptyState({
   onAction?: () => void;
 }) {
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-cyan-200/30 bg-white/[0.04] p-6 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg border border-cyan-200/30 bg-cyan-200/10 text-cyan-100 shadow-sm">
+    <div className="empty-state">
+      <div className="empty-state-icon">
         <Zap size={22} aria-hidden="true" />
       </div>
-      <h3 className="text-xl font-semibold tracking-tight text-white">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm leading-6 text-slate-400">{copy}</p>
+      <h3 className="empty-state-title">{title}</h3>
+      <p className="empty-state-copy mt-2 max-w-sm">{copy}</p>
       {actionLabel && onAction && (
         <button className="primary-button mt-4" type="button" onClick={onAction}>
           <Plus size={17} aria-hidden="true" />
@@ -2332,20 +2375,20 @@ function EntryRow({
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-[var(--accent)]" />
-          <h3 className="text-lg font-semibold tracking-tight text-white">{entry.flavour}</h3>
-          <span className="rounded-md border border-white/10 bg-white/10 px-2 py-1 text-xs font-medium text-slate-300">
+          <h3 className="entry-title">{entry.flavour}</h3>
+          <span className="entry-chip">
             {entry.cans} can{entry.cans === 1 ? "" : "s"} · {entry.sizeMl}ml
           </span>
-          <span className="rounded-md border border-cyan-200/20 bg-cyan-200/10 px-2 py-1 text-xs font-medium text-cyan-100">
+          <span className="source-badge">
             {entry.source}
           </span>
         </div>
-        <p className="text-sm text-slate-400">{humanDateTime(entry.dateTime)}</p>
-        <p className="mt-2 text-sm text-slate-200">
+        <p className="entry-meta">{humanDateTime(entry.dateTime)}</p>
+        <p className="entry-summary mt-2">
           {currency.format(spendFor(entry))} · {wholeNumber.format(caffeineFor(entry))}mg caffeine · {oneDecimal.format(sugarFor(entry))}g sugar
         </p>
         {(entry.store || entry.notes) && (
-          <p className="mt-2 text-sm leading-6 text-slate-400">
+          <p className="entry-meta mt-2 leading-6">
             {entry.store ? `${entry.store}` : ""}
             {entry.store && entry.notes ? " · " : ""}
             {entry.notes}
@@ -2356,7 +2399,7 @@ function EntryRow({
         <button className="icon-button" type="button" onClick={() => onEdit(entry)} aria-label={`Edit ${entry.flavour} entry`}>
           <Edit3 size={17} aria-hidden="true" />
         </button>
-        <button className="icon-button text-red-200" type="button" onClick={() => onDelete(entry.id)} aria-label={`Delete ${entry.flavour} entry`}>
+        <button className="icon-button" type="button" style={{ color: "#9f1c16" }} onClick={() => onDelete(entry.id)} aria-label={`Delete ${entry.flavour} entry`}>
           <Trash2 size={17} aria-hidden="true" />
         </button>
       </div>
@@ -2366,38 +2409,21 @@ function EntryRow({
 
 function MiniEntry({ entry }: { entry: RedBullEntry }) {
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3">
+    <div className="mini-entry-card">
       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: entry.flavourAccent }} />
       <div className="min-w-0">
-        <p className="truncate font-semibold text-white">{entry.flavour}</p>
-        <p className="truncate text-sm text-slate-400">{humanDateTime(entry.dateTime)}</p>
+        <p className="mini-entry-title truncate">{entry.flavour}</p>
+        <p className="mini-entry-meta truncate">{humanDateTime(entry.dateTime)}</p>
       </div>
-      <p className="text-sm font-semibold text-white">{currency.format(spendFor(entry))}</p>
+      <p className="mini-entry-price">{currency.format(spendFor(entry))}</p>
     </div>
-  );
-}
-
-function DisclaimerCard() {
-  return (
-    <section className="rounded-lg border border-cyan-200/20 bg-cyan-200/10 p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-200/30 bg-[#07101f] text-cyan-100 shadow-sm">
-          <Gauge size={19} aria-hidden="true" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-white">Estimates</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-300">
-            Caffeine and sugar values are estimates. Check the can label for exact nutritional information.
-          </p>
-        </div>
-      </div>
-    </section>
   );
 }
 
 function EntryModal({
   open,
   entry,
+  initialDraft,
   flavours,
   saving,
   onClose,
@@ -2405,43 +2431,46 @@ function EntryModal({
 }: {
   open: boolean;
   entry: RedBullEntry | null;
+  initialDraft: EntryDraft | null;
   flavours: Flavour[];
   saving: boolean;
   onClose: () => void;
   onSave: (draft: EntryDraft) => void;
 }) {
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const initialFlavour = entry?.flavour ?? DEFAULT_FLAVOUR.name;
+  const activeDraft = entry ?? initialDraft;
+  const initialFlavour = activeDraft?.flavour ?? DEFAULT_FLAVOUR.name;
   const [selectedFlavour, setSelectedFlavour] = useState(initialFlavour);
   const [customFlavour, setCustomFlavour] = useState("");
-  const [customAccent, setCustomAccent] = useState("#39d5ff");
-  const [cans, setCans] = useState(entry?.cans.toString() ?? "1");
-  const [sizePreset, setSizePreset] = useState(sizeToPreset(entry?.sizeMl ?? 250));
-  const [customSize, setCustomSize] = useState(entry?.sizeMl.toString() ?? "250");
-  const [pricePerCan, setPricePerCan] = useState(entry?.pricePerCan.toString() ?? "1.75");
-  const [dateTime, setDateTime] = useState(formatLocalInput(entry ? new Date(entry.dateTime) : new Date()));
-  const [store, setStore] = useState(entry?.store ?? "");
-  const [notes, setNotes] = useState(entry?.notes ?? "");
-  const [sugarFree, setSugarFree] = useState(entry?.sugarFree ?? false);
-  const [caffeineOverride, setCaffeineOverride] = useState(entry?.caffeineMgPerCan?.toString() ?? "");
+  const [customAccent, setCustomAccent] = useState(MATERIAL_ACCENTS.custom);
+  const [cans, setCans] = useState(activeDraft?.cans.toString() ?? "1");
+  const [sizePreset, setSizePreset] = useState(sizeToPreset(activeDraft?.sizeMl ?? 250));
+  const [customSize, setCustomSize] = useState(activeDraft?.sizeMl.toString() ?? "250");
+  const [pricePerCan, setPricePerCan] = useState(activeDraft?.pricePerCan.toString() ?? "1.75");
+  const [dateTime, setDateTime] = useState(formatLocalInput(activeDraft ? new Date(activeDraft.dateTime) : new Date()));
+  const [store, setStore] = useState(activeDraft?.store ?? "");
+  const [notes, setNotes] = useState(activeDraft?.notes ?? "");
+  const [sugarFree, setSugarFree] = useState(activeDraft?.sugarFree ?? false);
+  const [caffeineOverride, setCaffeineOverride] = useState(activeDraft?.caffeineMgPerCan?.toString() ?? "");
 
   useEffect(() => {
     if (!open) return;
-    const editingCustom = entry && !BUILT_IN_FLAVOURS.some((flavour) => flavour.name === entry.flavour);
-    setSelectedFlavour(editingCustom ? entry.flavour : entry?.flavour ?? DEFAULT_FLAVOUR.name);
-    setCustomFlavour(editingCustom ? entry.flavour : "");
-    setCustomAccent(entry?.flavourAccent ?? "#39d5ff");
-    setCans(entry?.cans.toString() ?? "1");
-    setSizePreset(sizeToPreset(entry?.sizeMl ?? 250));
-    setCustomSize(entry?.sizeMl.toString() ?? "250");
-    setPricePerCan(entry?.pricePerCan.toString() ?? defaultPriceForSize(250).toString());
-    setDateTime(formatLocalInput(entry ? new Date(entry.dateTime) : new Date()));
-    setStore(entry?.store ?? "");
-    setNotes(entry?.notes ?? "");
-    setSugarFree(entry?.sugarFree ?? false);
-    setCaffeineOverride(entry?.caffeineMgPerCan?.toString() ?? "");
+    const draft = entry ?? initialDraft;
+    const editingCustom = draft && !BUILT_IN_FLAVOURS.some((flavour) => flavour.name === draft.flavour);
+    setSelectedFlavour(editingCustom ? draft.flavour : draft?.flavour ?? DEFAULT_FLAVOUR.name);
+    setCustomFlavour(editingCustom ? draft.flavour : "");
+    setCustomAccent(draft?.flavourAccent ?? MATERIAL_ACCENTS.custom);
+    setCans(draft?.cans.toString() ?? "1");
+    setSizePreset(sizeToPreset(draft?.sizeMl ?? 250));
+    setCustomSize(draft?.sizeMl.toString() ?? "250");
+    setPricePerCan(draft?.pricePerCan.toString() ?? defaultPriceForSize(250).toString());
+    setDateTime(formatLocalInput(draft ? new Date(draft.dateTime) : new Date()));
+    setStore(draft?.store ?? "");
+    setNotes(draft?.notes ?? "");
+    setSugarFree(draft?.sugarFree ?? false);
+    setCaffeineOverride(draft?.caffeineMgPerCan?.toString() ?? "");
     window.setTimeout(() => firstFieldRef.current?.focus(), 80);
-  }, [entry, open]);
+  }, [entry, initialDraft, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -2483,15 +2512,43 @@ function EntryModal({
       store: store.trim(),
       sugarFree: sugarFree || Boolean(meta.sugarFree),
       caffeineMgPerCan: override,
-      source: entry?.source ?? "manual",
-    });
+      source: entry?.source ?? initialDraft?.source ?? "manual",
+    };
+  }, [
+    open,
+    cans,
+    pricePerCan,
+    isOther,
+    customFlavour,
+    selectedFlavour,
+    customAccent,
+    numericSize,
+    dateTime,
+    notes,
+    store,
+    sugarFree,
+    sizePreset,
+    caffeineOverride,
+    entry?.source,
+    initialDraft?.source,
+  ]);
+
+  const draftLimitCheck = useMemo(() => {
+    if (!draftPreview) return null;
+    return evaluateLimits(userLimits, entries, { draft: draftPreview, excludeEntryId: entry?.id });
+  }, [draftPreview, entries, entry?.id, userLimits]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!draftPreview) return;
+    onSave(draftPreview);
   }
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xl"
+          className="modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -2509,8 +2566,8 @@ function EntryModal({
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Intake details</p>
-                <h2 id="entry-modal-title" className="mt-1 text-3xl font-semibold tracking-tight text-white">
+                <p className="section-kicker">Intake details</p>
+                <h2 id="entry-modal-title" className="app-card-title mt-1 text-3xl">
                   {entry ? "Edit entry" : "Add intake"}
                 </h2>
               </div>
@@ -2615,11 +2672,11 @@ function EntryModal({
                 <textarea className="field-control min-h-24 resize-y" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Late drive, gym stop, exam fuel..." />
               </label>
 
-              <div className="rounded-lg border border-cyan-200/20 bg-cyan-200/10 px-3 py-3 text-sm text-cyan-50 sm:col-span-2">
+              <div className="rounded-lg px-3 py-3 text-sm sm:col-span-2" style={{ border: "1px solid #d8e1ee", background: "#f7faff", color: "#3c4043" }}>
                 Estimated caffeine per can: {wholeNumber.format(caffeinePreview)}mg
               </div>
 
-              <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-3 text-sm text-slate-200 sm:col-span-2">
+              <label className="field-label flex-row items-center gap-3 rounded-lg border px-3 py-3 sm:col-span-2" style={{ borderColor: "#d8e1ee", background: "#ffffff" }}>
                 <input className="h-4 w-4 accent-cyan-300" type="checkbox" checked={sugarFree} onChange={(event) => setSugarFree(event.target.checked)} />
                 Count this entry as sugar-free / zero sugar
               </label>
@@ -2660,7 +2717,7 @@ function ImportPreviewModal({
     <AnimatePresence>
       {preview && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xl"
+          className="modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -2763,7 +2820,7 @@ function ConfirmDialog({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xl"
+          className="modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -3008,6 +3065,11 @@ function firstName(user: AuthUser) {
   return value.split(/\s+/)[0] || "there";
 }
 
+function userInitial(user: AuthUser | null) {
+  const value = user?.name || user?.email || "r";
+  return value.trim().charAt(0).toUpperCase();
+}
+
 function sizeToPreset(size: number) {
   if (size === 250 || size === 355 || size === 473) return size.toString();
   return "custom";
@@ -3016,8 +3078,7 @@ function sizeToPreset(size: number) {
 function actionLabel(value: string) {
   return value
     .replace(/^quick-/, "quick add ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/-/g, " ");
 }
 
 export default App;
