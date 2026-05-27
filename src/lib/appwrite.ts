@@ -8,7 +8,7 @@ export const appwriteConfig = {
   projectId: env.VITE_APPWRITE_PROJECT_ID || "6a0752ee001fb2ef7138",
   databaseId: env.VITE_APPWRITE_DATABASE_ID || "redbull_tracker",
   collectionId: env.VITE_APPWRITE_COLLECTION_ID || "intake_entries",
-  chatCollectionId: env.VITE_APPWRITE_CHAT_COLLECTION_ID || "coach_chats",
+  barcodeCollectionId: env.VITE_APPWRITE_BARCODE_COLLECTION_ID || "barcode_products",
   oauthSuccessUrl: resolveOAuthUrl(env.VITE_APPWRITE_OAUTH_SUCCESS_URL),
   oauthFailureUrl: resolveOAuthUrl(env.VITE_APPWRITE_OAUTH_FAILURE_URL),
 };
