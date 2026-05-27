@@ -13,7 +13,6 @@ import {
   FileJson,
   FileSpreadsheet,
   Gauge,
-  Github,
   Home,
   LineChart,
   Loader2,
@@ -75,7 +74,7 @@ import {
   type AppTheme,
 } from "./data/themes";
 import { themeTokensToStyle } from "./lib/themeTokens";
-import { account, appwriteConfig, Channel, client, OAuthProvider, pingAppwrite } from "./lib/appwrite";
+import { account, appwriteConfig, Channel, client, pingAppwrite } from "./lib/appwrite";
 import {
   appwriteErrorMessage,
   createEntries,
@@ -341,16 +340,6 @@ function App() {
     } finally {
       setBusyAction(null);
     }
-  }
-
-  function startOAuth(provider: "github" | "google") {
-    const selectedProvider = provider === "github" ? OAuthProvider.Github : OAuthProvider.Google;
-    setBusyAction("oauth");
-    account.createOAuth2Session({
-      provider: selectedProvider,
-      success: appwriteConfig.oauthSuccessUrl,
-      failure: appwriteConfig.oauthFailureUrl,
-    });
   }
 
   async function logout() {
@@ -633,12 +622,11 @@ function App() {
     return (
       <AuthView
         authError={authError}
-        busy={busyAction === "auth" || busyAction === "oauth"}
+        busy={busyAction === "auth"}
         setupStatus={setupStatus}
         shellStyle={shellStyle}
         themeId={themeId}
         onLogin={login}
-        onOAuth={startOAuth}
         onSignup={signup}
       />
     );
@@ -891,7 +879,6 @@ function AuthView({
   shellStyle,
   themeId,
   onLogin,
-  onOAuth,
   onSignup,
 }: {
   authError: string;
@@ -900,7 +887,6 @@ function AuthView({
   shellStyle: CSSProperties;
   themeId: string;
   onLogin: (email: string, password: string) => Promise<void>;
-  onOAuth: (provider: "github" | "google") => void;
   onSignup: (name: string, email: string, password: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
@@ -971,22 +957,6 @@ function AuthView({
               </button>
             </form>
 
-            <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs uppercase tracking-[0.22em]" style={{ color: "#80868b" }}>
-              <span className="h-px" style={{ background: "#d8e1ee" }} />
-              or
-              <span className="h-px" style={{ background: "#d8e1ee" }} />
-            </div>
-
-            <div className="grid gap-2">
-              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("github")}>
-                <Github size={17} aria-hidden="true" />
-                Continue with GitHub
-              </button>
-              <button className="secondary-button justify-center" type="button" disabled={busy} onClick={() => onOAuth("google")}>
-                <User size={17} aria-hidden="true" />
-                Continue with Google
-              </button>
-            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
