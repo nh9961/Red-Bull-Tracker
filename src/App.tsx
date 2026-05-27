@@ -123,7 +123,21 @@ import {
   wholeNumber,
 } from "./lib/metrics";
 import { exportPayload, parseImport } from "./lib/storage";
-import type { CoachChat, CoachMessage, DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+import type { DateFilter, EntryDraft, Filters, Flavour, ImportPreview, RedBullEntry } from "./types";
+
+type CoachMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  thinking?: string;
+};
+
+type CoachChat = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: CoachMessage[];
+};
 
 type AppView = "overview" | "logbook" | "trends" | "settings";
 type AuthMode = "login" | "signup";
