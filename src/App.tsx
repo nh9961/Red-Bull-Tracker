@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CalendarDays,
+  Camera,
   ChevronRight,
   Cloud,
   Command,
@@ -82,6 +83,7 @@ import {
   updateEntry,
 } from "./lib/appwriteEntries";
 import { CoachPanel } from "./components/CoachPanel";
+import { BarcodeScannerModal } from "./components/BarcodeScannerModal";
 import { DailyLimitsCard } from "./components/DailyLimitsCard";
 import { LimitsSettingsForm } from "./components/LimitsSettingsForm";
 import { OnboardingScreen } from "./components/OnboardingScreen";
@@ -191,7 +193,9 @@ function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [activeView, setActiveView] = useState<AppView>("overview");
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
+  const [entryInitialDraft, setEntryInitialDraft] = useState<EntryDraft | null>(null);
   const [editingEntry, setEditingEntry] = useState<RedBullEntry | null>(null);
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [notice, setNotice] = useState("Appwrite session pending.");
   const [dataLoading, setDataLoading] = useState(false);
@@ -390,7 +394,12 @@ function App() {
 
   function openNewEntry() {
     setEditingEntry(null);
+    setEntryInitialDraft(null);
     setIsEntryModalOpen(true);
+  }
+
+  function openBarcodeScanner() {
+    setIsBarcodeScannerOpen(true);
   }
 
   async function saveUserLimits(next: UserLimits) {
@@ -451,6 +460,7 @@ function App() {
       );
       setNotice(editing ? "Entry updated in Appwrite." : "Entry saved to Appwrite.");
       setEditingEntry(null);
+      setEntryInitialDraft(null);
       setIsEntryModalOpen(false);
     } catch (error) {
       setDataError(appwriteErrorMessage(error));
@@ -476,6 +486,18 @@ function App() {
   async function saveEntry(draft: EntryDraft) {
     if (!user) return;
     requestEntrySave(draft, editingEntry?.id);
+  }
+
+  function addBarcodeDraft(draft: EntryDraft) {
+    setIsBarcodeScannerOpen(false);
+    requestEntrySave(draft);
+  }
+
+  function editBarcodeDraft(draft: EntryDraft) {
+    setIsBarcodeScannerOpen(false);
+    setEditingEntry(null);
+    setEntryInitialDraft(draft);
+    setIsEntryModalOpen(true);
   }
 
   async function quickAdd(item: (typeof QUICK_ADDS)[number]) {
@@ -682,6 +704,7 @@ function App() {
           setupStatus={setupStatus}
           user={user}
           onAdd={openNewEntry}
+          onScan={openBarcodeScanner}
           onChange={setActiveView}
           onOpenSettings={() => setActiveView("settings")}
         />
@@ -693,6 +716,7 @@ function App() {
             activeView={activeView}
             actionLoading={actionLoading}
             onAdd={openNewEntry}
+            onScan={openBarcodeScanner}
           />
 
           <StatusRail actionLoading={actionLoading} dataError={dataError} setupStatus={setupStatus} />
@@ -721,6 +745,7 @@ function App() {
                   coachSession={coachSession}
                   onQuickAdd={(item) => void quickAdd(item)}
                   onAdd={openNewEntry}
+                  onScan={openBarcodeScanner}
                   onOpenCoach={(prompt) => {
                     if (prompt) coachSession.queuePrompt(prompt);
                     setActiveView("coach");
@@ -801,6 +826,7 @@ function App() {
 
       <EntryModal
         entry={editingEntry}
+        initialDraft={entryInitialDraft}
         flavours={allFlavours}
         open={isEntryModalOpen}
         saving={actionLoading === "save-entry"}
@@ -809,8 +835,19 @@ function App() {
         onClose={() => {
           setIsEntryModalOpen(false);
           setEditingEntry(null);
+          setEntryInitialDraft(null);
         }}
         onSave={(draft) => void saveEntry(draft)}
+      />
+
+      <BarcodeScannerModal
+        busy={actionLoading === "save-entry"}
+        flavours={allFlavours}
+        open={isBarcodeScannerOpen}
+        userId={user.$id}
+        onAddNow={addBarcodeDraft}
+        onClose={() => setIsBarcodeScannerOpen(false)}
+        onEditBeforeAdding={editBarcodeDraft}
       />
 
       <ImportPreviewModal
@@ -1000,30 +1037,6 @@ function AuthView({
   );
 }
 
-function AuthSignal({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.06] p-3">
-      <Icon className="mb-3 text-cyan-200" size={18} aria-hidden="true" />
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function CurrentThemeIndicator({
-  theme,
-  onClick,
-}: {
-  theme: AppTheme;
-  onClick: () => void;
-}) {
-  return (
-    <button className="theme-indicator" type="button" onClick={onClick} aria-label={`Theme: ${theme.label}. Open settings.`}>
-      <span className="theme-indicator-swatch" style={{ background: theme.swatch }} aria-hidden="true" />
-      <span className="theme-indicator-label">{theme.label}</span>
-    </button>
-  );
-}
 
 function ThemePicker({
   themeId,
@@ -1091,6 +1104,7 @@ function Sidebar({
   setupStatus,
   user,
   onAdd,
+  onScan,
   onChange,
   onOpenSettings,
 }: {
@@ -1100,6 +1114,7 @@ function Sidebar({
   setupStatus: SetupStatus;
   user: AuthUser;
   onAdd: () => void;
+  onScan: () => void;
   onChange: (view: AppView) => void;
   onOpenSettings: () => void;
 }) {
@@ -1118,6 +1133,11 @@ function Sidebar({
       <button className="drawer-primary-action" type="button" onClick={onAdd}>
         <Plus size={19} aria-hidden="true" />
         Add intake
+      </button>
+
+      <button className="secondary-button mb-5 w-full justify-center" type="button" onClick={onScan}>
+        <Camera size={17} aria-hidden="true" />
+        Scan barcode
       </button>
 
       <nav className="drawer-nav" aria-label="Main navigation">
@@ -1175,10 +1195,12 @@ function TopBar({
   activeView,
   actionLoading,
   onAdd,
+  onScan,
 }: {
   activeView: AppView;
   actionLoading: string | null;
   onAdd: () => void;
+  onScan: () => void;
 }) {
   const activeItem = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
   const title = activeItem.label;
@@ -1204,6 +1226,10 @@ function TopBar({
       </div>
 
       <div className="top-action-row">
+        <button className="secondary-button justify-center min-h-12 text-sm active:scale-95" type="button" onClick={onScan} disabled={Boolean(actionLoading)}>
+          <Camera size={18} aria-hidden="true" />
+          Scan barcode
+        </button>
         <button className="primary-button justify-center min-h-12 text-sm active:scale-95" type="button" onClick={onAdd} disabled={Boolean(actionLoading)}>
           <Plus size={18} aria-hidden="true" />
           Add Intake
@@ -1261,6 +1287,7 @@ function OverviewView({
   limitCheck,
   onQuickAdd,
   onAdd,
+  onScan,
   onOpenCoach,
   onOpenLogbook,
   onOpenSettings,
@@ -1278,6 +1305,7 @@ function OverviewView({
   coachSession: CoachSession;
   onQuickAdd: (item: (typeof QUICK_ADDS)[number]) => void;
   onAdd: () => void;
+  onScan: () => void;
   onOpenCoach: (prompt?: string) => void;
   onOpenLogbook: () => void;
   onOpenSettings: () => void;
@@ -1305,7 +1333,7 @@ function OverviewView({
         <QuickAddPanel items={quickAdds} onQuickAdd={onQuickAdd} />
       </section>
 
-      <TodayPanel dashboard={dashboard} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} />
+      <TodayPanel dashboard={dashboard} entries={entries} userLimits={userLimits} limitCheck={limitCheck} onAdd={onAdd} onScan={onScan} />
 
       {limitCheck.violations.length ? (
         <section className="glass-panel border border-amber-200/20 bg-amber-200/10 p-4 sm:p-5">
@@ -1510,12 +1538,14 @@ function TodayPanel({
   userLimits,
   limitCheck,
   onAdd,
+  onScan,
 }: {
   dashboard: Dashboard;
   entries: RedBullEntry[];
   userLimits: UserLimits;
   limitCheck: LimitCheckResult;
   onAdd: () => void;
+  onScan: () => void;
 }) {
   const limitSummary = [
     userLimits.dailyCanLimit != null ? `${limitCheck.todayCans.toFixed(1)}/${userLimits.dailyCanLimit} cans` : null,
@@ -1542,6 +1572,10 @@ function TodayPanel({
         </div>
       </div>
       <div className="today-action-row mt-6 hidden flex-wrap items-center gap-2 lg:flex">
+        <button className="secondary-button" type="button" onClick={onScan}>
+          <Camera size={18} aria-hidden="true" />
+          Scan barcode
+        </button>
         <button className="primary-button" type="button" onClick={onAdd}>
           <Plus size={18} aria-hidden="true" />
           Add intake
@@ -1761,11 +1795,13 @@ function SpendingPredictionsCard({
         (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
       )[0].dateTime
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries]);
 
   const trackingDays = useMemo(() => {
     const diffTime = Math.abs(now.getTime() - firstEntryDate.getTime());
     return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstEntryDate]);
 
   const activePeriodDays = Math.min(30, trackingDays);
@@ -1781,12 +1817,13 @@ function SpendingPredictionsCard({
       avgDailyCans: totalCans / activePeriodDays,
       hasData: entries.length > 0,
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, activePeriodDays]);
 
   const projectionData = useMemo(() => {
     return Array.from({ length: projectionDays }).map((_, index) => {
       const day = index + 1;
-      const dataPoint: any = {
+      const dataPoint: Record<string, string | number> = {
         label: `Day ${day}`,
         "Current Path": Number((day * stats.avgDailySpend).toFixed(2)),
         "Optimal Path (-20%)": Number((day * stats.avgDailySpend * 0.8).toFixed(2)),
@@ -2032,7 +2069,7 @@ function SettingsView({
           </div>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <button className="secondary-button justify-center" type="button" onClick={() => { typeof window !== 'undefined' && window.location.reload(); }} disabled={dataLoading}>
+            <button className="secondary-button justify-center" type="button" onClick={() => { if (typeof window !== 'undefined') window.location.reload(); }} disabled={dataLoading}>
               {dataLoading ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <RefreshCcw size={17} aria-hidden="true" />}
               Sync now
             </button>
@@ -2415,6 +2452,7 @@ function DisclaimerCard() {
 function EntryModal({
   open,
   entry,
+  initialDraft,
   flavours,
   saving,
   userLimits,
@@ -2424,6 +2462,7 @@ function EntryModal({
 }: {
   open: boolean;
   entry: RedBullEntry | null;
+  initialDraft: EntryDraft | null;
   flavours: Flavour[];
   saving: boolean;
   userLimits: UserLimits;
@@ -2432,37 +2471,39 @@ function EntryModal({
   onSave: (draft: EntryDraft) => void;
 }) {
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const initialFlavour = entry?.flavour ?? DEFAULT_FLAVOUR.name;
+  const activeDraft = entry ?? initialDraft;
+  const initialFlavour = activeDraft?.flavour ?? DEFAULT_FLAVOUR.name;
   const [selectedFlavour, setSelectedFlavour] = useState(initialFlavour);
   const [customFlavour, setCustomFlavour] = useState("");
   const [customAccent, setCustomAccent] = useState(MATERIAL_ACCENTS.custom);
-  const [cans, setCans] = useState(entry?.cans.toString() ?? "1");
-  const [sizePreset, setSizePreset] = useState(sizeToPreset(entry?.sizeMl ?? 250));
-  const [customSize, setCustomSize] = useState(entry?.sizeMl.toString() ?? "250");
-  const [pricePerCan, setPricePerCan] = useState(entry?.pricePerCan.toString() ?? "1.75");
-  const [dateTime, setDateTime] = useState(formatLocalInput(entry ? new Date(entry.dateTime) : new Date()));
-  const [store, setStore] = useState(entry?.store ?? "");
-  const [notes, setNotes] = useState(entry?.notes ?? "");
-  const [sugarFree, setSugarFree] = useState(entry?.sugarFree ?? false);
-  const [caffeineOverride, setCaffeineOverride] = useState(entry?.caffeineMgPerCan?.toString() ?? "");
+  const [cans, setCans] = useState(activeDraft?.cans.toString() ?? "1");
+  const [sizePreset, setSizePreset] = useState(sizeToPreset(activeDraft?.sizeMl ?? 250));
+  const [customSize, setCustomSize] = useState(activeDraft?.sizeMl.toString() ?? "250");
+  const [pricePerCan, setPricePerCan] = useState(activeDraft?.pricePerCan.toString() ?? "1.75");
+  const [dateTime, setDateTime] = useState(formatLocalInput(activeDraft ? new Date(activeDraft.dateTime) : new Date()));
+  const [store, setStore] = useState(activeDraft?.store ?? "");
+  const [notes, setNotes] = useState(activeDraft?.notes ?? "");
+  const [sugarFree, setSugarFree] = useState(activeDraft?.sugarFree ?? false);
+  const [caffeineOverride, setCaffeineOverride] = useState(activeDraft?.caffeineMgPerCan?.toString() ?? "");
 
   useEffect(() => {
     if (!open) return;
-    const editingCustom = entry && !BUILT_IN_FLAVOURS.some((flavour) => flavour.name === entry.flavour);
-    setSelectedFlavour(editingCustom ? entry.flavour : entry?.flavour ?? DEFAULT_FLAVOUR.name);
-    setCustomFlavour(editingCustom ? entry.flavour : "");
-    setCustomAccent(entry?.flavourAccent ?? MATERIAL_ACCENTS.custom);
-    setCans(entry?.cans.toString() ?? "1");
-    setSizePreset(sizeToPreset(entry?.sizeMl ?? 250));
-    setCustomSize(entry?.sizeMl.toString() ?? "250");
-    setPricePerCan(entry?.pricePerCan.toString() ?? defaultPriceForSize(250).toString());
-    setDateTime(formatLocalInput(entry ? new Date(entry.dateTime) : new Date()));
-    setStore(entry?.store ?? "");
-    setNotes(entry?.notes ?? "");
-    setSugarFree(entry?.sugarFree ?? false);
-    setCaffeineOverride(entry?.caffeineMgPerCan?.toString() ?? "");
+    const draft = entry ?? initialDraft;
+    const editingCustom = draft && !BUILT_IN_FLAVOURS.some((flavour) => flavour.name === draft.flavour);
+    setSelectedFlavour(editingCustom ? draft.flavour : draft?.flavour ?? DEFAULT_FLAVOUR.name);
+    setCustomFlavour(editingCustom ? draft.flavour : "");
+    setCustomAccent(draft?.flavourAccent ?? MATERIAL_ACCENTS.custom);
+    setCans(draft?.cans.toString() ?? "1");
+    setSizePreset(sizeToPreset(draft?.sizeMl ?? 250));
+    setCustomSize(draft?.sizeMl.toString() ?? "250");
+    setPricePerCan(draft?.pricePerCan.toString() ?? defaultPriceForSize(250).toFixed(2));
+    setDateTime(formatLocalInput(draft ? new Date(draft.dateTime) : new Date()));
+    setStore(draft?.store ?? "");
+    setNotes(draft?.notes ?? "");
+    setSugarFree(draft?.sugarFree ?? false);
+    setCaffeineOverride(draft?.caffeineMgPerCan?.toString() ?? "");
     window.setTimeout(() => firstFieldRef.current?.focus(), 80);
-  }, [entry, open]);
+  }, [entry, initialDraft, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -2503,7 +2544,7 @@ function EntryModal({
       store: store.trim(),
       sugarFree: sugarFree || Boolean(meta.sugarFree),
       caffeineMgPerCan: override,
-      source: entry?.source ?? "manual",
+      source: entry?.source ?? initialDraft?.source ?? "manual",
     };
   }, [
     open,
@@ -2521,6 +2562,7 @@ function EntryModal({
     sizePreset,
     caffeineOverride,
     entry?.source,
+    initialDraft?.source,
   ]);
 
   const draftLimitCheck = useMemo(() => {

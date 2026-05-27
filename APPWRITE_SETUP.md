@@ -37,6 +37,7 @@ Configured defaults:
 - Database ID: `redbull_tracker`
 - Collection ID: `intake_entries`
 - Chat collection ID: `coach_chats`
+- Barcode collection ID: `barcode_products`
 
 `client.ping()` is called automatically during app boot in `src/App.tsx` through `pingAppwrite()` from `src/lib/appwrite.ts`.
 
@@ -85,6 +86,8 @@ Appwrite currently uses newer Console wording in many places:
 So if the Console asks you to create a **table**, that is the same resource as the `VITE_APPWRITE_COLLECTION_ID` this app currently points at. If the setup below says **attributes**, add them as **columns** inside that table.
 
 The app uses Appwrite's current `TablesDB` SDK methods (`listRows`, `createRow`, `updateRow`, `deleteRow`). The env var remains named `VITE_APPWRITE_COLLECTION_ID` for compatibility with the first setup pass, but its value should be your table ID.
+
+The barcode scanner uses a separate `barcode_products` table by default. Verified Red Bull barcode rows are seeded by `scripts/setup-appwrite.mjs` using `APPWRITE_API_KEY`; browser code can only read verified rows and create/update the current user's own mappings with row-level permissions.
 
 Create a database with ID:
 

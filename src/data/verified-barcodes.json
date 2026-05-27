@@ -1,0 +1,475 @@
+{
+  "90162602": {
+    "flavourName": "Original",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - ORIGINAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-original-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode. Price uses tracker default."
+  },
+  "90493317": {
+    "flavourName": "Original",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - ORIGINAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-original-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current GBP 1.75 PMP barcode."
+  },
+  "90457999": {
+    "flavourName": "Original",
+    "sizeMl": 250,
+    "pricePerCan": 1.65,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - ORIGINAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-original-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older GBP 1.65 PMP barcode."
+  },
+  "90162800": {
+    "flavourName": "Sugar Free",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - SUGAR FREE",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-sugar-free/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode. Price uses tracker default."
+  },
+  "90496066": {
+    "flavourName": "Sugar Free",
+    "sizeMl": 250,
+    "pricePerCan": 1.7,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - SUGAR FREE",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-sugar-free/",
+    "variant": "current-pmp",
+    "notes": "Current GBP 1.70 PMP barcode."
+  },
+  "90457982": {
+    "flavourName": "Sugar Free",
+    "sizeMl": 250,
+    "pricePerCan": 1.6,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL NON PMP - SUGAR FREE",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-non-pmp-sugar-free/",
+    "variant": "older-pmp",
+    "notes": "Older GBP 1.60 PMP barcode."
+  },
+  "90415425": {
+    "flavourName": "Zero",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL ZERO 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-zero-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode. Price uses tracker default."
+  },
+  "90496011": {
+    "flavourName": "Zero",
+    "sizeMl": 250,
+    "pricePerCan": 1.7,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL ZERO 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-zero-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current GBP 1.70 PMP barcode."
+  },
+  "90457890": {
+    "flavourName": "Zero",
+    "sizeMl": 250,
+    "pricePerCan": 1.6,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL ZERO 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-zero-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older GBP 1.60 PMP barcode."
+  },
+  "90493423": {
+    "flavourName": "Cherry Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Spring Edition Cherry Sakura Energy Drink 250ml",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/833691-1",
+    "variant": "pmp",
+    "notes": "PMP barcode verified. Plain can barcode not publicly verified in the supplied source list."
+  },
+  "90493539": {
+    "flavourName": "Summer Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Summer Edition Citrus Zest Energy Drink 250ml",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/833324-1",
+    "variant": "pmp",
+    "notes": "PMP barcode verified. Sugarfree Citrus Zest barcode was not publicly verified in the supplied source list."
+  },
+  "90486449": {
+    "flavourName": "Winter Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "BB Foodservice",
+    "sourceName": "Red Bull Winter Edition Fuji Apple & Ginger Energy Drink",
+    "sourceUrl": "https://www.bbfoodservice.co.uk/product/830604-1",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Fuji Apple & Ginger listing mapped to existing Winter Edition flavour."
+  },
+  "90493485": {
+    "flavourName": "Winter Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "BB Foodservice",
+    "sourceName": "Red Bull Winter Edition Fuji Apple & Ginger Energy Drink",
+    "sourceUrl": "https://www.bbfoodservice.co.uk/product/830604-1",
+    "variant": "pmp",
+    "notes": "PMP barcode mapped to existing Winter Edition flavour."
+  },
+  "90493355": {
+    "flavourName": "Peach",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Peach Edition White Peach Energy Drink 250ml",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/832794-1",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified. Plain can barcode not publicly verified in the supplied source list."
+  },
+  "90474576": {
+    "flavourName": "Peach",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Peach Edition White Peach Energy Drink 250ml",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/832794-1",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90457449": {
+    "flavourName": "Iced Vanilla",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - ICED VANILLA BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-iced-vanilla-berry-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493324": {
+    "flavourName": "Iced Vanilla",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - ICED VANILLA BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-iced-vanilla-berry-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90486234": {
+    "flavourName": "Iced Vanilla",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - ICED VANILLA BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-iced-vanilla-berry-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90454035": {
+    "flavourName": "Juneberry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - JUNEBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-juneberry-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493737": {
+    "flavourName": "Juneberry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - JUNEBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-juneberry-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90474095": {
+    "flavourName": "Juneberry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - JUNEBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-juneberry-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90446412": {
+    "flavourName": "Watermelon",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - WATERMELON 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-watermelon-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493713": {
+    "flavourName": "Watermelon",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - WATERMELON 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-watermelon-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90457975": {
+    "flavourName": "Watermelon",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - WATERMELON 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-watermelon-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90415739": {
+    "flavourName": "Tropical",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - TROPICAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-tropical-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493348": {
+    "flavourName": "Tropical",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - TROPICAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-tropical-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90474057": {
+    "flavourName": "Tropical",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - TROPICAL 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-tropical-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90435348": {
+    "flavourName": "Coconut Berry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - COCONUT & BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-coconut-berry-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493720": {
+    "flavourName": "Coconut Berry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - COCONUT & BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-coconut-berry-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90457951": {
+    "flavourName": "Coconut Berry",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - COCONUT & BERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-coconut-berry-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90456831": {
+    "flavourName": "Curuba Elderflower",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - SUMMER CARUBA 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-summer-caruba-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode appears under older Caruba naming."
+  },
+  "90493362": {
+    "flavourName": "Curuba Elderflower",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - SUMMER CARUBA 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-summer-caruba-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90474064": {
+    "flavourName": "Curuba Elderflower",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - SUMMER CARUBA 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-summer-caruba-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90453168": {
+    "flavourName": "Apricot Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - APRICOT & STRAWBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-apricot-strawberry-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493300": {
+    "flavourName": "Apricot Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - APRICOT & STRAWBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-apricot-strawberry-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90457968": {
+    "flavourName": "Apricot Edition",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "Red Bull - APRICOT & STRAWBERRY 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-apricot-strawberry-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90454899": {
+    "flavourName": "Ruby",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Intamarque",
+    "sourceName": "Red Bull The Ruby Edition Spiced Pear Energy Drink 250ml",
+    "sourceUrl": "https://intamarquewholesale.com/products/red-bull-the-ruby-edition-spiced-pear-energy-drink-250ml",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493560": {
+    "flavourName": "Ruby",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Intamarque",
+    "sourceName": "Red Bull The Ruby Edition Spiced Pear Energy Drink 250ml",
+    "sourceUrl": "https://intamarquewholesale.com/products/red-bull-the-ruby-edition-spiced-pear-energy-drink-250ml",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90474088": {
+    "flavourName": "Ruby",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "verifiedBy": "Intamarque",
+    "sourceName": "Red Bull The Ruby Edition Spiced Pear Energy Drink 250ml",
+    "sourceUrl": "https://intamarquewholesale.com/products/red-bull-the-ruby-edition-spiced-pear-energy-drink-250ml",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90456985": {
+    "flavourName": "Pink Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - SF PINK 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-sf-pink-250ml/",
+    "variant": "meal-deal-or-no-price",
+    "notes": "Verified non-PMP barcode."
+  },
+  "90493379": {
+    "flavourName": "Pink Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - SF PINK 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-sf-pink-250ml/",
+    "variant": "current-pmp",
+    "notes": "Current PMP barcode verified."
+  },
+  "90474071": {
+    "flavourName": "Pink Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - SF PINK 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-sf-pink-250ml/",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90456978": {
+    "flavourName": "Pink Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Brand Factory Ltd",
+    "sourceName": "RED BULL COLOURS NON PMP - SF PINK 250ML",
+    "sourceUrl": "https://www.brandfactory.co.uk/product/red-bull-colours-non-pmp-sf-pink-250ml/",
+    "variant": "pmp",
+    "notes": "Additional PMP barcode verified."
+  },
+  "90493294": {
+    "flavourName": "Lilac Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Lilac Edition Sugarfree Grapefruit & Blossom Energy Drink",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/832789-1",
+    "variant": "current-pmp",
+    "notes": "PMP barcode verified. Plain can barcode not publicly verified in the supplied source list."
+  },
+  "90474774": {
+    "flavourName": "Lilac Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Lilac Edition Sugarfree Grapefruit & Blossom Energy Drink",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/832789-1",
+    "variant": "older-pmp",
+    "notes": "Older PMP barcode verified."
+  },
+  "90486067": {
+    "flavourName": "Lilac Sugarfree",
+    "sizeMl": 250,
+    "pricePerCan": 1.75,
+    "sugarFree": true,
+    "verifiedBy": "Bestway Wholesale",
+    "sourceName": "Red Bull Lilac Edition Sugarfree Grapefruit & Blossom Energy Drink",
+    "sourceUrl": "https://www.bestwaywholesale.co.uk/product/832789-1",
+    "variant": "pmp",
+    "notes": "Additional PMP barcode verified."
+  }
+}

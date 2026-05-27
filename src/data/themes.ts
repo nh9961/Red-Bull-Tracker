@@ -51,147 +51,149 @@ export const APP_THEMES: AppTheme[] = [
     tertiary: "#ffd8e7",
   }),
 
-  theme("original", "Original", "flavour", "#00a7ff", {
-    primary: "#0077c8",
-    secondary: "#00a7ff",
-    tertiary: "#1e3264",
+  theme("original", "Original", "flavour", "#282874", {
+    primary: "#282874",
+    secondary: "#efefef",
+    tertiary: "#d4af37",
+    tokens: {
+      chartSecondary: "#e6301f",
+    },
   }),
-  theme("zero", "Zero", "flavour", "#2a2a2a", {
-    primary: "#2a2a2a",
-    secondary: "#5c5c5c",
-    tertiary: "#8a8a8a",
-    dark: true,
+  theme("zero", "Zero", "flavour", "#b1d0ee", {
+    primary: "#b1d0ee",
+    secondary: "#efefef",
+    tertiary: "#e6301f",
   }),
   theme("summer", "Summer Edition", "flavour", "#f0e53b", {
-    primary: "#d4c400",
-    secondary: "#f0e53b",
-    tertiary: "#ffc247",
+    primary: "#f2e853",
+    secondary: "#efefef",
+    tertiary: "#8a8f98",
   }),
-  theme("cherry", "Cherry Edition", "flavour", "#e40046", {
-    primary: "#c3093b",
-    secondary: "#e40046",
-    tertiary: "#ff6b8a",
+  theme("cherry", "Cherry Edition", "flavour", "#d81b60", {
+    primary: "#d81b60",
+    secondary: "#efefef",
+    tertiary: "#b50045",
   }),
   theme("spring", "Spring Edition", "flavour", "#ff8fab", {
     primary: "#e85d8a",
     secondary: "#ffb3c6",
     tertiary: "#ffd8e7",
   }),
-  theme("apple", "Apple Edition", "flavour", "#78be20", {
-    primary: "#5a9a12",
-    secondary: "#78be20",
-    tertiary: "#a8d84a",
+  theme("apple", "Apple Edition", "flavour", "#bf1431", {
+    primary: "#bf1431",
+    secondary: "#f6c300",
+    tertiary: "#f3911b",
   }),
-  theme("peach", "Peach Edition", "flavour", "#ff9b63", {
-    primary: "#e87a3a",
-    secondary: "#ff9b63",
-    tertiary: "#ffc9a3",
+  theme("peach", "Peach Edition", "flavour", "#e24585", {
+    primary: "#e24585",
+    secondary: "#efefef",
+    tertiary: "#d6417e",
   }),
   theme("ice", "Ice Edition", "flavour", "#49adbe", {
-    primary: "#2d8a9a",
-    secondary: "#49adbe",
-    tertiary: "#7ce7ff",
+    primary: "#53b2c2",
+    secondary: "#efefef",
+    tertiary: "#49adbe",
   }),
-  theme("blue-edition", "Blue Edition", "flavour", "#496dff", {
-    primary: "#3a52cc",
-    secondary: "#496dff",
-    tertiary: "#9c73ff",
+  theme("blue-edition", "Blue Edition", "flavour", "#0085c8", {
+    primary: "#0085c8",
+    secondary: "#efefef",
+    tertiary: "#ff73d1",
   }),
-  theme("red-edition", "Red Edition", "flavour", "#ff355e", {
-    primary: "#e02045",
-    secondary: "#ff355e",
-    tertiary: "#ff6b8a",
+  theme("red-edition", "Red Edition", "flavour", "#e6301f", {
+    primary: "#e6301f",
+    secondary: "#efefef",
+    tertiary: "#78b941",
   }),
-  theme("tropical", "Tropical Edition", "flavour", "#ffc247", {
-    primary: "#e0a820",
-    secondary: "#ffc247",
-    tertiary: "#ff9b63",
+  theme("tropical", "Tropical Edition", "flavour", "#ffcb04", {
+    primary: "#ffcb04",
+    secondary: "#efefef",
+    tertiary: "#f6c300",
   }),
-  theme("coconut", "Coconut Edition", "flavour", "#7ce7ff", {
-    primary: "#4ec4e0",
-    secondary: "#7ce7ff",
-    tertiary: "#d8f9ff",
+  theme("coconut", "Coconut Edition", "flavour", "#0070b8", {
+    primary: "#0070b8",
+    secondary: "#efefef",
+    tertiary: "#8a8f98",
   }),
-  theme("green-edition", "Green Edition", "flavour", "#b7ff4a", {
-    primary: "#7acc20",
-    secondary: "#b7ff4a",
-    tertiary: "#d4ff8a",
+  theme("green-edition", "Green Edition", "flavour", "#78b941", {
+    primary: "#78b941",
+    secondary: "#efefef",
+    tertiary: "#f3911b",
   }),
-  theme("apricot", "Apricot Edition", "flavour", "#ff8c42", {
-    primary: "#e06a20",
-    secondary: "#ff8c42",
-    tertiary: "#ffb87a",
+  theme("apricot", "Apricot Edition", "flavour", "#f3911b", {
+    primary: "#f3911b",
+    secondary: "#efefef",
+    tertiary: "#d6417e",
   }),
-  theme("ruby", "Ruby Edition", "flavour", "#c3093b", {
-    primary: "#a00730",
-    secondary: "#c3093b",
-    tertiary: "#e04060",
+  theme("ruby", "Ruby Edition", "flavour", "#b50045", {
+    primary: "#b50045",
+    secondary: "#efefef",
+    tertiary: "#a3e635",
   }),
 
-  theme("sugarfree", "Sugarfree", "sugarfree", "#c8d4e0", {
-    primary: "#8a9bb0",
-    secondary: "#c8d4e0",
-    tertiary: "#e7eef8",
+  theme("sugarfree", "Sugarfree", "sugarfree", "#009edf", {
+    primary: "#009edf",
+    secondary: "#efefef",
+    tertiary: "#e6301f",
     sugarFree: true,
   }),
-  theme("sf-summer", "Summer Sugarfree", "sugarfree", "#e8e4a0", {
-    primary: "#c4c020",
-    secondary: "#e8e4a0",
-    tertiary: "#f0e53b",
+  theme("sf-summer", "Summer Sugarfree", "sugarfree", "#f0e53b", {
+    primary: "#f2e853",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-apple", "Apple Sugarfree", "sugarfree", "#b8d4a0", {
-    primary: "#6a9a30",
-    secondary: "#b8d4a0",
-    tertiary: "#78be20",
+  theme("sf-apple", "Apple Sugarfree", "sugarfree", "#bf1431", {
+    primary: "#bf1431",
+    secondary: "#f6c300",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-peach", "Peach Sugarfree", "sugarfree", "#f0d0b8", {
-    primary: "#d08050",
-    secondary: "#f0d0b8",
-    tertiary: "#ff9b63",
+  theme("sf-peach", "Peach Sugarfree", "sugarfree", "#e24585", {
+    primary: "#e24585",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-ice", "Ice Sugarfree", "sugarfree", "#b8e0e8", {
-    primary: "#4a9aaa",
-    secondary: "#b8e0e8",
-    tertiary: "#49adbe",
+  theme("sf-ice", "Ice Sugarfree", "sugarfree", "#49adbe", {
+    primary: "#53b2c2",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-lilac", "Lilac Sugarfree", "sugarfree", "#d8c8f0", {
-    primary: "#9070c0",
-    secondary: "#d8c8f0",
-    tertiary: "#b898e0",
+  theme("sf-lilac", "Lilac Sugarfree", "sugarfree", "#7d62ce", {
+    primary: "#7d62ce",
+    secondary: "#44c7b7",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-pink", "Pink Sugarfree", "sugarfree", "#f0c8d8", {
-    primary: "#d06090",
-    secondary: "#f0c8d8",
-    tertiary: "#ffb7d9",
+  theme("sf-pink", "Pink Sugarfree", "sugarfree", "#e77bab", {
+    primary: "#e77bab",
+    secondary: "#8a1f3d",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-blue", "Blue Sugarfree", "sugarfree", "#c8d0f8", {
-    primary: "#5060c0",
-    secondary: "#c8d0f8",
-    tertiary: "#496dff",
+  theme("sf-blue", "Blue Sugarfree", "sugarfree", "#0085c8", {
+    primary: "#0085c8",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-coconut", "Coconut Sugarfree", "sugarfree", "#d0f0f8", {
-    primary: "#60b8d0",
-    secondary: "#d0f0f8",
-    tertiary: "#7ce7ff",
+  theme("sf-coconut", "Coconut Sugarfree", "sugarfree", "#0070b8", {
+    primary: "#0070b8",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-green", "Green Sugarfree", "sugarfree", "#d8f0b8", {
-    primary: "#70a830",
-    secondary: "#d8f0b8",
-    tertiary: "#b7ff4a",
+  theme("sf-green", "Green Sugarfree", "sugarfree", "#78b941", {
+    primary: "#78b941",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
-  theme("sf-ruby", "Ruby Sugarfree", "sugarfree", "#f0c0c8", {
-    primary: "#a03050",
-    secondary: "#f0c0c8",
-    tertiary: "#c3093b",
+  theme("sf-ruby", "Ruby Sugarfree", "sugarfree", "#b50045", {
+    primary: "#b50045",
+    secondary: "#efefef",
+    tertiary: "#009edf",
     sugarFree: true,
   }),
   theme("sf-spring", "Spring Sugarfree", "sugarfree", "#f8d0e0", {
