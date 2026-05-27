@@ -191,24 +191,32 @@ export function BarcodeScannerModal({
     window.setTimeout(() => closeButtonRef.current?.focus(), 80);
 
     let active = true;
-    const video = videoRef.current;
-    if (!video) return undefined;
+    let frameId = 0;
 
-    void startBarcodeScanner(video, handleScannerResult, handleScannerError)
-      .then((controller) => {
-        if (!active) {
-          controller.stop();
-          return;
-        }
-        controllerRef.current = controller;
-        setScannerMode(controller.mode);
-        setPhase("scanning");
-      })
-      .catch((error: BarcodeScannerError) => {
-        if (!active) return;
-        setScannerError(error);
-        setPhase("error");
-      });
+    const startScanner = () => {
+      const video = videoRef.current;
+      if (!video || !active) return;
+
+      void startBarcodeScanner(video, handleScannerResult, handleScannerError)
+        .then((controller) => {
+          if (!active) {
+            controller.stop();
+            return;
+          }
+          controllerRef.current = controller;
+          setScannerMode(controller.mode);
+          setPhase("scanning");
+        })
+        .catch((error: BarcodeScannerError) => {
+          if (!active) return;
+          setScannerError(error);
+          setPhase("error");
+        });
+    };
+
+    frameId = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(startScanner);
+    });
 
     void listBarcodeCatalog()
       .then((catalog) => {
@@ -224,6 +232,7 @@ export function BarcodeScannerModal({
 
     return () => {
       active = false;
+      window.cancelAnimationFrame(frameId);
       stopScanner();
     };
   }, [applyManualDefaults, handleScannerError, handleScannerResult, open, stopScanner, userId]);
@@ -335,6 +344,7 @@ export function BarcodeScannerModal({
                   <video
                     ref={videoRef}
                     className="aspect-[3/4] w-full bg-black object-cover sm:aspect-video"
+                    autoPlay
                     muted
                     playsInline
                     aria-label="Live camera preview"
