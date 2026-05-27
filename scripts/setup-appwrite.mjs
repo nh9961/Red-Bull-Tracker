@@ -9,7 +9,6 @@ const endpoint = readEnv("VITE_APPWRITE_ENDPOINT", "https://fra.cloud.appwrite.i
 const projectId = readEnv("VITE_APPWRITE_PROJECT_ID", "6a0752ee001fb2ef7138");
 const databaseId = readEnv("VITE_APPWRITE_DATABASE_ID", "redbull_tracker");
 const intakeTableId = readEnv("VITE_APPWRITE_COLLECTION_ID", "intake_entries");
-const chatTableId = readEnv("VITE_APPWRITE_CHAT_COLLECTION_ID", "coach_chats");
 const barcodeTableId = readEnv("VITE_APPWRITE_BARCODE_COLLECTION_ID", "barcode_products");
 const apiKey = readEnv("APPWRITE_API_KEY", "");
 const verifiedBarcodeProducts = JSON.parse(
@@ -45,31 +44,8 @@ await ensureTable({
   ],
 });
 await ensureTable({
-  tableId: chatTableId,
-  name: "Coach chats",
-  columns: [
-    { kind: "string", key: "userId", size: 64, required: true },
-    { kind: "string", key: "title", size: 512, required: true },
-    { kind: "longtext", key: "messages", required: true },
-    { kind: "datetime", key: "updatedAt", required: true },
-  ],
-  indexes: [{ key: "user_chat_updated", type: "key", columns: ["userId", "updatedAt"], orders: ["ASC", "DESC"], lengths: [32] }],
-});
-await retireLegacyChatColumns(chatTableId, [
-  "encryptedTitle",
-  "encryptedMessages",
-  "titleIv",
-  "messagesIv",
-  "salt",
-  "version",
-]);
-await waitForColumns(chatTableId, ["userId", "title", "messages", "updatedAt"]);
-await ensureTable({
   tableId: barcodeTableId,
   name: "Barcode products",
-  // Schema notes:
-  // - scope="verified" rows are seeded by this admin script and readable by signed-in users.
-  // - scope="user" rows are created by the browser SDK with per-user row permissions.
   columns: [
     { kind: "string", key: "scope", size: 16, required: true },
     { kind: "string", key: "ownerUserId", size: 64, required: false },
@@ -154,39 +130,9 @@ async function ensureColumn(tableId, column) {
     array: false,
   };
   if (column.size) body.size = column.size;
-  if (column.encrypt) body.encrypt = true;
 
   await request("POST", `/tablesdb/${databaseId}/tables/${tableId}/columns/${column.kind}`, body, [202, 201]);
   console.log(`Column ${tableId}.${column.key} created.`);
-}
-
-async function retireLegacyChatColumns(tableId, keys) {
-  for (const key of keys) {
-    const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [200, 404]);
-    if (existing.status === 404) {
-      console.log(`Legacy column ${tableId}.${key} already removed.`);
-      continue;
-    }
-
-    await request("DELETE", `/tablesdb/${databaseId}/tables/${tableId}/columns/${key}`, undefined, [204, 404]);
-    console.log(`Legacy column ${tableId}.${key} removed.`);
-  }
-}
-
-async function ensureIndex(tableId, index) {
-  const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/indexes/${index.key}`, undefined, [200, 404]);
-  if (existing.status === 200) {
-    console.log(`Index ${tableId}.${index.key} exists.`);
-    return;
-  }
-
-  await request(
-    "POST",
-    `/tablesdb/${databaseId}/tables/${tableId}/indexes`,
-    { key: index.key, type: index.type, columns: index.columns, orders: index.orders, lengths: index.lengths },
-    [202, 201],
-  );
-  console.log(`Index ${tableId}.${index.key} created.`);
 }
 
 async function seedVerifiedBarcodeProducts(tableId, products) {
@@ -224,6 +170,22 @@ async function seedVerifiedBarcodeProducts(tableId, products) {
     await request("PUT", path, { data, permissions: ['read("users")'] }, [200]);
     console.log(`Verified barcode ${barcode} updated.`);
   }
+}
+
+async function ensureIndex(tableId, index) {
+  const existing = await request("GET", `/tablesdb/${databaseId}/tables/${tableId}/indexes/${index.key}`, undefined, [200, 404]);
+  if (existing.status === 200) {
+    console.log(`Index ${tableId}.${index.key} exists.`);
+    return;
+  }
+
+  await request(
+    "POST",
+    `/tablesdb/${databaseId}/tables/${tableId}/indexes`,
+    { key: index.key, type: index.type, columns: index.columns, orders: index.orders, lengths: index.lengths },
+    [202, 201],
+  );
+  console.log(`Index ${tableId}.${index.key} created.`);
 }
 
 async function waitForColumns(tableId, keys) {

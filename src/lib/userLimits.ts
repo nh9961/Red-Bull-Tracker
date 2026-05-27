@@ -178,25 +178,6 @@ export function limitStatusMessage(
   return lines.join(" ");
 }
 
-export function limitsSummaryForCoach(limits: UserLimits, check: LimitCheckResult): string {
-  const parts: string[] = [];
-
-  if (limits.dailyCanLimit != null) {
-    parts.push(`daily can limit: ${limits.dailyCanLimit} (${check.todayCans} logged today)`);
-  }
-  if (limits.dailySpendLimit != null) {
-    parts.push(`daily spend limit: ${currency.format(limits.dailySpendLimit)} (${currency.format(check.todaySpend)} today)`);
-  }
-  if (limits.stopTime) {
-    parts.push(
-      `stop drinking by: ${formatStopTimeLabel(limits.stopTime)} bst (${check.pastStopTime ? "past stop time now" : "before stop time"})`,
-    );
-  }
-
-  if (!parts.length) return "no personal daily limits configured yet.";
-  return parts.join(". ");
-}
-
 export function hasAnyLimit(limits: UserLimits) {
   return Boolean(limits.dailyCanLimit != null || limits.dailySpendLimit != null || limits.stopTime);
 }

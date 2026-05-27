@@ -42,7 +42,7 @@ export function buildDynamicGreeting(input: GreetingInput): GreetingResult {
   if (cans === 0) {
     headline =
       streak > 0
-        ? `${input.name}, nothing logged yet today — ${streak}-day streak still alive.`
+        ? `${input.name}, nothing logged yet today. ${streak}-day streak still alive.`
         : `${input.name}, no Red Bulls logged yet this ${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"}.`;
   } else if (cans === 1) {
     headline = `${input.name}, one Red Bull in so far today.`;
@@ -50,14 +50,14 @@ export function buildDynamicGreeting(input: GreetingInput): GreetingResult {
     if (cans >= input.dailyCanLimit) {
       headline = `${input.name}, you're at your ${input.dailyCanLimit}-can daily limit.`;
     } else if (cans >= input.dailyCanLimit - 1) {
-      headline = `${input.name}, ${cans} Red Bulls today — one under your limit.`;
+      headline = `${input.name}, ${cans} Red Bulls today. One under your limit.`;
     } else {
-      headline = `${input.name}, ${cans} Red Bulls today — steady pace.`;
+      headline = `${input.name}, ${cans} Red Bulls today. Steady pace.`;
     }
   } else if (cans <= 3) {
-    headline = `${input.name}, ${cans} Red Bulls today — steady pace.`;
+    headline = `${input.name}, ${cans} Red Bulls today. Steady pace.`;
   } else {
-    headline = `${input.name}, ${cans} Red Bulls today — worth watching the caffeine curve.`;
+    headline = `${input.name}, ${cans} Red Bulls today. Worth watching the caffeine curve.`;
   }
 
   const flavourLine = favourite
@@ -76,9 +76,9 @@ export function buildDynamicGreeting(input: GreetingInput): GreetingResult {
     (cans > 0 && input.todayCaffeineMg > 0
       ? `~${Math.round(input.todayCaffeineMg)}mg caffeine so far.`
       : hour >= 17 && cans === 0
-        ? "Evening reset — clean slate if you want it."
+        ? "Evening reset. Clean slate if you want it."
         : hour >= 22
-          ? "Late night — pace yourself if you're still going."
+          ? "Late night. Pace yourself if you're still going."
           : "Log an intake to unlock today's signals.");
 
   const limitLine =

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, Check, ChevronLeft } from "lucide-react";
-import { APP_THEMES, THEME_CATEGORIES, type ThemeCategory } from "../data/themes";
+import { APP_THEMES } from "../data/themes";
 import { currency } from "../lib/metrics";
 import type { UserLimits } from "../types";
 
@@ -33,12 +33,6 @@ export function OnboardingScreen({
   const [dailySpendLimit, setDailySpendLimit] = useState<number | "none">(3.5);
   const [stopTime, setStopTime] = useState<string | "none">("18:00");
   const [saving, setSaving] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<ThemeCategory>("flavour");
-
-  const visibleThemes = useMemo(() => {
-    return APP_THEMES.filter((theme) => theme.category === activeCategory);
-  }, [activeCategory]);
-
   const activeTheme = useMemo(() => {
     return APP_THEMES.find((theme) => theme.id === activeThemeId) ?? APP_THEMES[0];
   }, [activeThemeId]);
@@ -56,7 +50,7 @@ export function OnboardingScreen({
       await onSave(limits, activeThemeId);
       onClose();
     } catch (err) {
-      console.error("Failed to save onboarding preferences", err);
+      console.error("setup save failed", err);
     } finally {
       setSaving(false);
     }
@@ -117,7 +111,7 @@ export function OnboardingScreen({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           background:
-            "radial-gradient(circle at 76% 20%, color-mix(in srgb, var(--primary-container) 62%, transparent) 0 22%, transparent 44%), radial-gradient(circle at 12% 84%, color-mix(in srgb, var(--tertiary-container) 48%, transparent) 0 18%, transparent 42%)",
+            "linear-gradient(180deg, color-mix(in srgb, var(--primary-container) 24%, transparent), transparent 36%)",
         }}
       />
 
@@ -127,22 +121,22 @@ export function OnboardingScreen({
             <div className="h-full rounded-full bg-[var(--primary)] transition-all duration-500" style={{ width: progress }} />
           </div>
           <p className="text-xs font-normal uppercase tracking-[0.18em] text-[var(--muted)]">
-            Question {step} of {STEP_COUNT}
+            step {step} of {STEP_COUNT}
           </p>
         </div>
-        <p className="hidden text-xs font-normal text-[var(--muted)] sm:block">Red Bull Intake Tracker</p>
+        <p className="hidden text-xs font-normal text-[var(--muted)] sm:block">Red Bull tracker</p>
       </header>
 
       <main className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-10 sm:py-16">
         {step === 1 && (
           <section className="grid gap-9">
             <div className="grid gap-5">
-              <p className="text-sm font-normal text-[var(--primary)]">Energy setup</p>
+              <p className="text-sm font-normal text-[var(--primary)]">setup</p>
               <h1 className="max-w-2xl text-5xl font-normal leading-[0.95] tracking-[-0.055em] sm:text-7xl">
                 Hey {userName || "there"}. Set your baseline.
               </h1>
               <p className="max-w-xl text-lg font-normal leading-8 text-[var(--muted)]">
-                Six quick screens. Pick a theme, then set light guardrails for cans, spend, and late caffeine.
+                Pick a theme, then set optional limits for cans, spend, and time.
               </p>
             </div>
             <button
@@ -160,35 +154,14 @@ export function OnboardingScreen({
         {step === 2 && (
           <section className="grid gap-8">
             <div className="grid gap-4">
-              <p className="text-sm font-normal text-[var(--primary)]">1. Visual style</p>
+              <p className="text-sm font-normal text-[var(--primary)]">theme</p>
               <h2 className="max-w-2xl text-4xl font-normal leading-tight tracking-[-0.04em] sm:text-6xl">
-                Choose the mood you want to see every day.
+                Choose the app color.
               </h2>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {THEME_CATEGORIES.map((cat) => {
-                const isActive = activeCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setActiveCategory(cat.id)}
-                    className="rounded-full border px-4 py-2 text-sm font-normal transition"
-                    style={{
-                      background: isActive ? "var(--primary-container)" : "var(--surface-container-lowest)",
-                      borderColor: isActive ? "var(--primary)" : "var(--outline-variant)",
-                      color: isActive ? "var(--on-primary-container)" : "var(--muted)",
-                    }}
-                  >
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </div>
-
             <div className="grid max-h-[48vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-              {visibleThemes.map((theme) => {
+              {APP_THEMES.map((theme) => {
                 const isActive = activeThemeId === theme.id;
                 return (
                   <button
@@ -227,12 +200,12 @@ export function OnboardingScreen({
         {step === 3 && (
           <section className="grid gap-9">
             <div className="grid gap-4">
-              <p className="text-sm font-normal text-[var(--primary)]">2. Daily cans</p>
+              <p className="text-sm font-normal text-[var(--primary)]">daily cans</p>
               <h2 className="max-w-2xl text-4xl font-normal leading-tight tracking-[-0.04em] sm:text-6xl">
                 What is your daily can ceiling?
               </h2>
               <p className="max-w-lg text-base leading-7 text-[var(--muted)]">
-                App warns before logging past this number. You can change it later.
+                The app warns before saving an entry over this number. You can change it later.
               </p>
             </div>
 
@@ -303,12 +276,12 @@ export function OnboardingScreen({
         {step === 4 && (
           <section className="grid gap-9">
             <div className="grid gap-4">
-              <p className="text-sm font-normal text-[var(--primary)]">3. Daily spend</p>
+              <p className="text-sm font-normal text-[var(--primary)]">daily spend</p>
               <h2 className="max-w-2xl text-4xl font-normal leading-tight tracking-[-0.04em] sm:text-6xl">
                 Set a daily spend line.
               </h2>
               <p className="max-w-lg text-base leading-7 text-[var(--muted)]">
-                Useful for catching small purchases before they stack up.
+                Useful if you want a spending line for the day.
               </p>
             </div>
 
@@ -379,12 +352,12 @@ export function OnboardingScreen({
         {step === 5 && (
           <section className="grid gap-8">
             <div className="grid gap-4">
-              <p className="text-sm font-normal text-[var(--primary)]">4. Caffeine curfew</p>
+              <p className="text-sm font-normal text-[var(--primary)]">time limit</p>
               <h2 className="max-w-2xl text-4xl font-normal leading-tight tracking-[-0.04em] sm:text-6xl">
-                When should late caffeine stop?
+                When should the app warn you?
               </h2>
               <p className="max-w-lg text-base leading-7 text-[var(--muted)]">
-                Choose when the app should warn you that sleep may take the hit.
+                Pick a time. The app will warn when an entry is later than this.
               </p>
             </div>
 
@@ -427,7 +400,7 @@ export function OnboardingScreen({
         {step === 6 && (
           <section className="grid gap-8">
             <div className="grid gap-4">
-              <p className="text-sm font-normal text-[var(--primary)]">Ready</p>
+              <p className="text-sm font-normal text-[var(--primary)]">done</p>
               <h2 className="max-w-2xl text-4xl font-normal leading-tight tracking-[-0.04em] sm:text-6xl">
                 This is your tracking profile.
               </h2>
@@ -487,7 +460,7 @@ export function OnboardingScreen({
         ) : (
           <span />
         )}
-        <p className="text-xs font-normal text-[var(--muted)]">Minimal setup. Editable later.</p>
+        <p className="text-xs font-normal text-[var(--muted)]">you can edit this later.</p>
       </footer>
     </div>
   );

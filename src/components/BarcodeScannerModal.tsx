@@ -301,7 +301,7 @@ export function BarcodeScannerModal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-xl sm:p-4"
+          className="modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/70 backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -318,11 +318,11 @@ export function BarcodeScannerModal({
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Camera scan</p>
-                <h2 id="barcode-scanner-title" className="mt-1 text-3xl font-semibold tracking-tight text-white">
+                <p className="section-kicker">Camera scan</p>
+                <h2 id="barcode-scanner-title" className="app-card-title mt-1 text-3xl">
                   Scan barcode
                 </h2>
-                <p className="mt-2 text-sm text-slate-300">Point your camera at the barcode on the can.</p>
+                <p className="app-card-subtitle mt-2">Point your camera at the barcode on the can.</p>
               </div>
               <button ref={closeButtonRef} className="icon-button" type="button" onClick={onClose} aria-label="Close barcode scanner">
                 <X size={18} aria-hidden="true" />
