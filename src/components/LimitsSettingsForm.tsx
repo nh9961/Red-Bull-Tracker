@@ -56,7 +56,7 @@ export function LimitsSettingsForm({ limits, check, saving, onSave }: LimitsSett
     <form className="grid gap-4" onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-2 text-sm">
-          <span className="font-medium text-slate-300">Cans per day</span>
+          <span className="font-medium text-slate-700">Cans per day</span>
           <input
             className="field-input"
             type="number"
@@ -70,7 +70,7 @@ export function LimitsSettingsForm({ limits, check, saving, onSave }: LimitsSett
         </label>
 
         <label className="grid gap-2 text-sm">
-          <span className="font-medium text-slate-300">Spend per day (£)</span>
+          <span className="font-medium text-slate-700">Spend per day (£)</span>
           <input
             className="field-input"
             type="number"
@@ -85,7 +85,7 @@ export function LimitsSettingsForm({ limits, check, saving, onSave }: LimitsSett
       </div>
 
       <label className="grid gap-2 text-sm sm:max-w-xs">
-        <span className="font-medium text-slate-300">Stop drinking by</span>
+        <span className="font-medium text-slate-700">Stop drinking by</span>
         <input
           className="field-input"
           type="time"
@@ -96,7 +96,7 @@ export function LimitsSettingsForm({ limits, check, saving, onSave }: LimitsSett
       </label>
 
       {previewParts.length ? (
-        <p className="rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-slate-300">
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
           Today so far: {previewParts.join(" · ")}
         </p>
       ) : null}

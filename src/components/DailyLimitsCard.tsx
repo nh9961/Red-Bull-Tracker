@@ -15,8 +15,8 @@ export function DailyLimitsCard({ limits, check, onOpenSettings }: DailyLimitsCa
       <section className="limits-card glass-panel p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Daily limits</p>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+            <p className="section-kicker">Daily limits</p>
+            <p className="section-meta mt-2 max-w-xl leading-6">
               Set how many cans you want per day, when to stop, and a spend cap. Limits are optional and stored on your
               account.
             </p>
@@ -37,7 +37,7 @@ export function DailyLimitsCard({ limits, check, onOpenSettings }: DailyLimitsCa
   return (
     <section className="limits-card glass-panel p-5 sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-100">Daily limits</p>
+        <p className="section-kicker">Daily limits</p>
         <button className="list-button !min-h-9 !px-3 !py-1.5 text-xs" type="button" onClick={onOpenSettings}>
           <Settings2 size={14} aria-hidden="true" />
           Edit
