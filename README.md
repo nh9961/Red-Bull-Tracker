@@ -78,7 +78,6 @@ The app runs at `http://localhost:5173`.
 | `VITE_APPWRITE_DATABASE_ID` | Yes | Database ID (default: `redbull_tracker`) |
 | `VITE_APPWRITE_COLLECTION_ID` | Yes | Intake entries collection ID |
 | `VITE_APPWRITE_CHAT_COLLECTION_ID` | Yes | Coach chats collection ID |
-
 | `VITE_OLLAMA_PROXY_URL` | No | AI coach proxy endpoint |
 | `OLLAMA_API_KEY` | No | Server-side Ollama API key |
 | `OLLAMA_MODEL` | No | Ollama model for coach (default: `deepseek-v4-pro:cloud`) |
