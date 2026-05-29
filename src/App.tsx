@@ -166,7 +166,7 @@ const DEFAULT_FILTERS: Filters = {
 const QUICK_ADDS = [
   { label: "Original", flavour: "Original", sizeMl: 250, pricePerCan: 1.75 },
   { label: "Sugar Free", flavour: "Sugar Free", sizeMl: 250, pricePerCan: 1.75 },
-  { label: "Tropical", flavour: "Tropical", sizeMl: 250, pricePerCan: 1.75 },
+  { label: "Iced Vanilla", flavour: "Iced Vanilla", sizeMl: 250, pricePerCan: 1.75 },
   { label: "473ml Original", flavour: "Original", sizeMl: 473, pricePerCan: 2.85 },
 ];
 
