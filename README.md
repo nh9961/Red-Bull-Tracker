@@ -1,15 +1,14 @@
 # 🐂 Red Bull Intake Tracker
 
-Track your Red Bull consumption with per-can logging, barcode scanning, spending insights, and an AI-powered coach. Built with React, Appwrite, and Material You theming.
+Track your Red Bull consumption with per-can logging, barcode scanning, spending insights, and a coach. Built with React, Appwrite, and Material You theming.
 
-![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Vite](https://img.shields.io/badge/Vite-6-purple) ![Appwrite](https://img.shields.io/badge/Appwrite-Cloud-pink)
+![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Vite](https://img.shields.io/badge/Vite-6-purple) ![Appwrite](https://img.shields.io/badge/Appwrite-Cloud-pink)   
 
 ## Features
 
 - **Quick logging** — tap a flavour, pick a size, done. Cans are tracked with timestamp, price, and store
 - **Barcode scanning** — scan any Red Bull can (EAN-13/EAN-8/UPC-A) and it auto-fills flavour, size, and caffeine. 475+ verified barcodes built in, with user overrides
 - **20 built-in flavours** — Original, Zero, Ruby, Tropical, Dragon Fruit, and more, each with its own accent colour
-- **AI coach** — ChatGPT-style chat interface powered by Ollama, keeps per-session context and gives caffeine/spending advice
 - **Daily limits** — set max cans/day, max spend/day, and a cut-off time. Get warned when you're about to breach
 - **Charts & analytics** — intake over time, flavour breakdown (pie chart), spending trends, caffeine metrics
 - **Import** — bulk import from Excel (.xlsx) or JSON, with duplicate detection and row-level error preview
@@ -26,7 +25,6 @@ Track your Red Bull consumption with per-can logging, barcode scanning, spending
 | Styling | Tailwind CSS, Framer Motion |
 | Charts | Recharts |
 | Backend | Appwrite Cloud (auth, database, storage) |
-| AI | Ollama (via server proxy) |
 | Barcode | @zxing/browser |
 | Import/Export | ExcelJS |
 
@@ -77,10 +75,9 @@ The app runs at `http://localhost:5173`.
 | `VITE_APPWRITE_PROJECT_ID` | Yes | Your Appwrite project ID |
 | `VITE_APPWRITE_DATABASE_ID` | Yes | Database ID (default: `redbull_tracker`) |
 | `VITE_APPWRITE_COLLECTION_ID` | Yes | Intake entries collection ID |
-| `VITE_APPWRITE_CHAT_COLLECTION_ID` | Yes | Coach chats collection ID |
-| `VITE_OLLAMA_PROXY_URL` | No | AI coach proxy endpoint |
-| `OLLAMA_API_KEY` | No | Server-side Ollama API key |
-| `OLLAMA_MODEL` | No | Ollama model for coach (default: `deepseek-v4-pro:cloud`) |
+| `VITE_OLLAMA_PROXY_URL` | No | Proxy endpoint |
+| `OLLAMA_API_KEY` | No | Server-side API key |
+| `OLLAMA_MODEL` | No | Model for coach |
 | `APPWRITE_API_KEY` | No | Admin key for `setup:appwrite` script only |
 
 ## Project Structure
@@ -91,7 +88,7 @@ src/
 ├── components/
 │   ├── BarcodeScannerModal.tsx  # Camera barcode scanner
 │   ├── BarcodeProductPreview.tsx
-│   ├── CoachPanel.tsx           # AI coach chat UI
+│   ├── CoachPanel.tsx           # Coach chat UI
 │   ├── DailyLimitsCard.tsx      # Limit status & warnings
 │   ├── LimitsSettingsForm.tsx
 │   └── OnboardingScreen.tsx
@@ -107,8 +104,8 @@ src/
 │   ├── barcodeLookup.ts        # Multi-source barcode resolution
 │   ├── barcodeScanner.ts       # @zxing scanner wrapper
 │   ├── userBarcodeMappings.ts  # Per-user barcode overrides
-│   ├── coachChats.ts           # Coach chat persistence
-│   ├── useCoachSession.ts      # Coach chat hook
+│   ├── coachChats.ts           # Chat persistence
+│   ├── useCoachSession.ts      # Chat hook
 │   ├── userLimits.ts           # Daily limit logic
 │   ├── metrics.ts              # Computed stats & charts
 │   ├── excel.ts                # Excel import/export
